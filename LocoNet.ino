@@ -5,8 +5,8 @@
 extern const uint8_t SLOTMAX;
 extern SSlotData_t SlotTabelle[SLOTMAX];
 
-static  lnMsg   *pstLnPacket;
-static  LnBuf   LnBuffer;
+static  lnMsg   *LnPacket;
+static  LnBuf   LnTxBuffer;
 
 /*  
  *  http://www.digitrax.com/static/apps/cms/media/documents/loconet/loconetpersonaledition.pdf
@@ -103,14 +103,14 @@ void InitLocoNet()
 void HandleLocoNetMessages()
 {
 #if defined TELEGRAM_FROM_SERIAL
-  pstLnPacket = NULL;
+  LnPacket = NULL;
   if (Serial.available())
   {
     byte byte_Read = Serial.read();
     if(byte_Read == '\n')
     {
       if(AnalyzeBuffer() > 0)
-        pstLnPacket = (lnMsg*) (&ui8a_resultBuffer);
+        LnPacket = (lnMsg*) (&ui8a_resultBuffer);
       ClearReceiveBuffer();
     }
     else
@@ -122,20 +122,20 @@ void HandleLocoNetMessages()
 #else
 
   // Check for any received LocoNet packets
-  pstLnPacket = LocoNet.receive();
+  LnPacket = LocoNet.receive();
 #endif
-  if(pstLnPacket)
+  if(LnPacket)
   {
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
 		Printout('R');
 #endif
-		uint8_t slot(pstLnPacket->data[1]);
+		uint8_t slot(LnPacket->data[1]);
 		if (slot < SLOTMAX)
 		{
-			switch (pstLnPacket->data[0])
+			switch (LnPacket->data[0])
 			{
 				case OPC_LOCO_ADR:		// 0xBF
-					SlotManager(pstLnPacket->data[2], slot);
+					SlotManager(LnPacket->data[2], slot);
 					break;
 
 				case OPC_RQ_SL_DATA:	// 0xBB
@@ -143,7 +143,13 @@ void HandleLocoNetMessages()
 					break;
 
 				case OPC_MOVE_SLOTS:	// 0xBA
-					if (pstLnPacket->data[2] == slot)
+#if defined DEBUG
+          Serial.print("LnPacket->data[2]:");
+          Serial.println(LnPacket->data[2]);
+          Serial.print("slot:");
+          Serial.println(slot);
+#endif
+					if (LnPacket->data[2] == slot)
 					{
 						if (slot != 0x00)
 						{
@@ -153,7 +159,7 @@ void HandleLocoNetMessages()
 						else
 							Slot_SL_RD(2);
 					}
-					if ((slot != 0x00) && (pstLnPacket->data[2] == 0x00))
+					if ((slot != 0x00) && (LnPacket->data[2] == 0x00))
 					{
 						SlotTabelle[slot].ucSTAT &= ~(1 << 4);
 						SlotTabelle[slot].ucSTAT |= (1 << 5);
@@ -161,7 +167,7 @@ void HandleLocoNetMessages()
 					break;
 
 				case OPC_WR_SL_DATA:	// 0xEF
-					write_SL_Data(pstLnPacket->sd);
+					write_SL_Data(LnPacket->sd);
 					break;
 
 				case OPC_LONG_ACK:		// 0xB4
@@ -170,10 +176,10 @@ void HandleLocoNetMessages()
 
 				default:  // ignore packets that we don't want to handle
 					break;
-			} // switch (pstLnPacket->data[0])
+			} // switch (LnPacket->data[0])
 		}
 
-  } // if(pstLnPacket)
+  } // if(LnPacket)
 }
 
 char MasterReplyLAck(uint8_t ucRequestOpc, uint8_t ucParam)
@@ -185,56 +191,60 @@ char MasterReplyLAck(uint8_t ucRequestOpc, uint8_t ucParam)
   uint8_t ui8_ChkSum(OPC_LONG_ACK ^ ucRequestOpc ^ ucParam ^ 0xFF);  //XOR
   bitWrite(ui8_ChkSum, 7, 0);     // set MSB zero
 
-  addByteLnBuf( &LnBuffer, OPC_LONG_ACK); //0xB4
-  addByteLnBuf( &LnBuffer, ucRequestOpc); //1. Data Byte
-  addByteLnBuf( &LnBuffer, ucParam);      //2. Data Byte
-  addByteLnBuf( &LnBuffer, ui8_ChkSum);   //Checksum
-  addByteLnBuf( &LnBuffer, 0xFF);         //Limiter
+  addByteLnBuf( &LnTxBuffer, OPC_LONG_ACK); //0xB4
+  addByteLnBuf( &LnTxBuffer, ucRequestOpc); //1. Data Byte
+  addByteLnBuf( &LnTxBuffer, ucParam);      //2. Data Byte
+  addByteLnBuf( &LnTxBuffer, ui8_ChkSum);   //Checksum
+  addByteLnBuf( &LnTxBuffer, 0xFF);         //Limiter
 
   // Check to see if we have received a complete packet yet
-  pstLnPacket = recvLnMsg( &LnBuffer );    //Prepare to send
-  if(pstLnPacket)
+  LnPacket = recvLnMsg( &LnTxBuffer );    //Prepare to send
+  if(LnPacket)
   {
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
     Printout('T');
 #endif
-    return LocoNet.send(pstLnPacket);  // Send the packet to the LocoNet
+    return LocoNet.send(LnPacket);  // Send the packet to the LocoNet
   }
   return 0;
 }
 
 void Slot_SL_RD(uint8_t slot)
 {
-	if (slot >= SLOTMAX)
-		return;
+  uint16_t ui16LocoAddress(SlotTabelle[slot].ucADR  + (SlotTabelle[slot].ucADR2 >> 7));
+  if((!bShowFrediSV && !ui16LocoAddress) || (slot >= SLOTMAX))
+  {
+    MasterReplyLAck(0x3A, 0x00);
+    return;
+  }
 
   uint8_t ui8_ChkSum(OPC_SL_RD_DATA ^ 0x0e ^ slot ^ SlotTabelle[slot].ucSTAT ^ SlotTabelle[slot].ucADR ^ SlotTabelle[slot].ucSPD ^ SlotTabelle[slot].ucDIRF ^ 0x05 ^ SlotTabelle[slot].ucSS2 ^ SlotTabelle[slot].ucADR2 ^ SlotTabelle[slot].ucSND ^ SlotTabelle[slot].ucID1 ^ SlotTabelle[slot].ucID2 ^ 0xFF);  //XOR
   bitWrite(ui8_ChkSum, 7, 0);     // set MSB zero
 
-	addByteLnBuf( &LnBuffer, OPC_SL_RD_DATA); //0xE7
-	addByteLnBuf( &LnBuffer, 0x0e);
-	addByteLnBuf( &LnBuffer, slot);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucSTAT);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucADR);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucSPD);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucDIRF);
-	addByteLnBuf( &LnBuffer, 0x05); //trk
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucSS2);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucADR2);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucSND);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucID1);
-	addByteLnBuf( &LnBuffer, SlotTabelle[slot].ucID2);
-	addByteLnBuf( &LnBuffer, ui8_ChkSum);   //Checksum
-	addByteLnBuf( &LnBuffer, 0xFF);         //Limiter
+	addByteLnBuf( &LnTxBuffer, OPC_SL_RD_DATA); //0xE7
+	addByteLnBuf( &LnTxBuffer, 0x0e);
+	addByteLnBuf( &LnTxBuffer, slot);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSTAT);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucADR);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSPD);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucDIRF);
+	addByteLnBuf( &LnTxBuffer, 0x05); //trk
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSS2);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucADR2);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSND);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucID1);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucID2);
+	addByteLnBuf( &LnTxBuffer, ui8_ChkSum);   //Checksum
+	addByteLnBuf( &LnTxBuffer, 0xFF);         //Limiter
 
 	// Check to see if we have received a complete packet yet
-  pstLnPacket = recvLnMsg( &LnBuffer );    //Prepare to send
-  if(pstLnPacket)
+  LnPacket = recvLnMsg( &LnTxBuffer );    //Prepare to send
+  if(LnPacket)
   {
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
     Printout('T');
 #endif
-    LocoNet.send(pstLnPacket);  // Send the packet to the LocoNet
+    LocoNet.send(LnPacket);  // Send the packet to the LocoNet
   }
 }
 
@@ -261,15 +271,15 @@ void write_SL_Data(rwSlotDataMsg SL_Data)
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
 void Printout(char ch)
 {
-  if(pstLnPacket)
+  if(LnPacket)
   {
     // print out the packet in HEX
     Serial.print(ch);
-    Serial.print(F("X: "));
-    uint8_t ui8_msgLen = getLnMsgSize(pstLnPacket); 
+    Serial.print("X: ");
+    uint8_t ui8_msgLen = getLnMsgSize(LnPacket); 
     for (uint8_t i = 0; i < ui8_msgLen; i++)
     {
-      uint8_t ui8_val = pstLnPacket->data[i];
+      uint8_t ui8_val = LnPacket->data[i];
       // Print a leading 0 if less than 16 to make 2 HEX digits
       if(ui8_val < 16)
         Serial.print('0');
@@ -277,6 +287,6 @@ void Printout(char ch)
       Serial.print(' ');
     }
     Serial.println();
-  } // if(pstLnPacket)
+  } // if(LnPacket)
 }
 #endif

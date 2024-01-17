@@ -46,6 +46,8 @@
             - with OLED (or LCD)
             - and display ThrottleID on OLED
             - DEBUG-support added
+            2023-11-17 by Michael Zimmermann
+            - added functionality for read and show of most interesting FrediSVs
   
 used I²C-Addresses:
   - 0x78  OLED-Panel ggf. mit
@@ -81,15 +83,17 @@ discrete In/Outs used for functionalities:
 
 //#define LCD
 #define OLED
+#define FREDI_SV
 
-#if defined LCD
-  #if defined OLED
-    #error LCD and OLED defined
-  #endif
+#if defined LCD && defined OLED
+  #error LCD and OLED defined
 #endif
-#if !defined LCD
-  #if !defined OLED
+#if !defined OLED
+  #if !defined LCD
     #error Neither LCD nor OLED defined
+  #endif
+  #if defined FREDI_SV
+    #error OLED define for FREDI_SV missing
   #endif
 #endif
     
@@ -99,6 +103,7 @@ HeartBeat oHeartbeat;
 //========================================================
 
 #include <LocoNet.h>  // used to include ln_opc.h
+#include "LocoNetFrediSV.h"
 
 #if not defined BUTTON_SELECT
   #define BUTTON_SELECT 0x01
@@ -172,20 +177,25 @@ static const char* Stat1ToString(unsigned char s)
   for(int i = 0; i < COUNT; i++) 
 		if( ( s & DEC_MODE_MASK ) == statTable[i].stat1Val ) 
 			return statTable[i].stringVal;
- 	return "?  ";
+ 	return "?   ";
 }
 
 static void adr_lcd(uint8_t slot)
 {
+	if (slot < SLOTMAX)
+		ui16_ThrottleId = (SlotTabelle[slot].ucID2 << 8) + SlotTabelle[slot].ucID1;
+  if(bShowFrediSV)
+    return;
+
 	lcd_clrxy(0, 0, 16);
 	lcd_goto(0, 0);
 	lcd_write("Alt: ");
 	if (slot < SLOTMAX)
 	{
 		if (SlotTabelle[slot].ucADR2 > 0)
-			lcd_word((SlotTabelle[slot].ucADR2 * 128 + SlotTabelle[slot].ucADR));
+			lcd_wordAsDec((SlotTabelle[slot].ucADR2 * 128 + SlotTabelle[slot].ucADR));
 		else
-			lcd_word(SlotTabelle[slot].ucADR);
+			lcd_wordAsDec(SlotTabelle[slot].ucADR);
 
 		lcd_goto(12, 0);
 		lcd_write(Stat1ToString(SlotTabelle[slot].ucSTAT));
@@ -229,7 +239,7 @@ static void readzahl(uint8_t aktwert)
 	stelle++;
 	lcd_clrxy(5, 1, 4);
 	lcd_goto(5, 1);
-	lcd_word(zahl);
+	lcd_wordAsDec(zahl);
 	disp_put();
 }
 
@@ -237,6 +247,7 @@ uint8_t get_Tastatur()
 {
 	uint16_t ui16_EditValue(0);
 	uint8_t ui8_buttons(0);
+  // returns non-zero-value in ui8_buttons when key is released after pressing him
   getEditValueFromKeypad(true, 9, &ui16_EditValue, &ui8_buttons);
 
   if(ui8_buttons & BUTTON_SELECT)  // '#'
@@ -266,18 +277,42 @@ void fahrstufenCHG()
 void HandleTastatur()
 {
 	uint8_t taste(get_Tastatur());
-	if (taste == 99)
-	{
-		stelle = 0;
-		zahl = 0;
-		taste = 66;
-		lcd_clrxy(5, 1, 7);
-	}
-	if (taste == 98)
-	{
-		taste = 66;
-		fahrstufenCHG();
-	}
+  if(!bShowFrediSV)
+  {
+    if (taste == 99)  // '*'
+    {
+      stelle = 0;
+      zahl = 0;
+      disp_put();
+      taste = 66;
+      lcd_clrxy(5, 1, 7);
+    }
+    if (taste == 98)  // '#'
+    {
+      taste = 66;
+      fahrstufenCHG();
+    }
+  }    
+#if defined FREDI_SV
+  else
+  {
+    if(taste == 1)
+      lcd_SV_Part1();
+    if(taste == 2)
+      lcd_SV_Part2();
+    if(taste == 3)
+      lcd_SV_Part3();
+    if(taste == 4)
+      lcd_SV_Part4();
+    if(taste == 5)
+      lcd_SV_Part5();
+    if(taste == 6)
+      lcd_SV_Part6();
+    if(taste == 7)
+      lcd_SV_Part7();
+    taste = 66;
+  }
+#endif
 	if (taste != 66)
 	  readzahl(taste);
 }
@@ -306,10 +341,18 @@ void setup()
   lcd_title();
   lcd_clear();
   lcd_goto(0, 1);
-	lcd_write("Neu: ");
-  fahrstufen = 1;
-  fahrstufenCHG();
+
+#if defined FREDI_SV
+  setupForFrediSV();
+  if(!bShowFrediSV)
+#endif
+  {
+    lcd_write("Neu: ");
+    fahrstufen = 1;
+    fahrstufenCHG();
+  }
 }
+
 
 void loop()
 {

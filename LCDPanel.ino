@@ -23,12 +23,6 @@ void lcd_write(const char *s)
   lcd.print(s);
 }
 
-/* write one character to the LCD */
-void lcd_putc(char c)
-{
-  lcd.print(c);
-}
-
 /* Go to the specified position */
 void lcd_goto(uint8_t x, uint8_t y)
 {
@@ -43,7 +37,7 @@ void lcd_clrxy(uint8_t x, uint8_t y, uint8_t count)
   lcd.setCursor(x, y);
 }
 
-void lcd_word(uint16_t ui16_Out)
+void lcd_wordAsDec(uint16_t ui16_Out)
 {
   // 4 digits, 0..9999
   if(ui16_Out < 1000)
@@ -57,10 +51,10 @@ void lcd_word(uint16_t ui16_Out)
 
 void lcd_title()
 {
-	lcd_write("FRANZ 2.0");
+	lcd_write("FRANZ 2.1");
   lcd_goto(0, 1);
 	lcd_write("(c)Kr");
-  lcd_putc(char(0xF5));  // ü
+  lcd.print(char(0xF5));  // ü
 	lcd_write("melsoft");
   delay(2000);
 }
