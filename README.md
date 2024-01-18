@@ -7,7 +7,7 @@ In Dispa.ino you can select whether the software should be compiled for an LCD o
 
 Version 2.1 supports the reading of Parameters from FREDI using the LNSV2-protocol (OLED is requested then).
 In Dispa.ino you can select whether the software should be compiled with or without reading SVs.<br>
-For usage of reading Parameters plese refer to chapter 2.3 "FREDI-Diagnose" in the manual [manual](Dispa.pdf)<br>
+For usage of reading Parameters plese refer to chapter 2.3 "FREDI-Diagnose" in the [manual](Documentation/Dispa.pdf)<br>
 
 ### Requested libraries
 DISPA requires my libraries listed below in addition to various Arduino standard libraries:<br> 
