@@ -3,11 +3,15 @@
 was developed in FREMO to assign a vehicle to a LocoNET-throttle independently of a DCC command station. 
 
 Version 2.0 (and higher) was developed for the usage on an Arduino-UNO or a compatible board.<br>
-In Dispa.ino you can select whether the software should be compiled for an LCD or OLED.<br>
 
 Version 2.1 supports the reading of Parameters from FREDI using the LNSV2-protocol (OLED is requested then).
-In Dispa.ino you can select whether the software should be compiled with or without reading SVs.<br>
-For usage of reading Parameters plese refer to chapter 2.3 "FREDI-Diagnose" in the [manual](Documentation/Dispa.pdf)<br>
+
+Version 2.2 supports the reading of Parameters from FREDI using the LNSV2-protocol either with OLED or LCD.
+
+In Dispa.ino you can select whether the software should be compiled<br> 
+- for usage with LCD or OLED.<br>
+- with or without reading FREDI-SVs.<br>
+  For the meaning of SVs please refer to chapter 2.3 "FREDI-Diagnose" in the [manual](Documentation/Dispa.pdf)<br>
 
 ### Requested libraries
 DISPA requires my libraries listed below in addition to various Arduino standard libraries:<br> 

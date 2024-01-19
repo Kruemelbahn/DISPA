@@ -1,7 +1,9 @@
 //=== LocoNet for Dispa ===
 #include <LocoNet.h>
 
-//=== declaration of var's 
+//=== declaration of var's
+#define DEFAULT_LOCO_ADDRESS 3
+ 
 extern const uint8_t SLOTMAX;
 extern SSlotData_t SlotTabelle[SLOTMAX];
 
@@ -31,7 +33,7 @@ static  LnBuf   LnTxBuffer;
 // Leerzeichen zwischen zwei Bytes erforderlich
 // Prüfsumme wird am Ende automatisch ermittelt und hinzugefügt
 #if defined TELEGRAM_FROM_SERIAL
-static const int MAX_LEN_LNBUF = 64;
+static const uint8_t MAX_LEN_LNBUF = 64;
 uint8_t ui8_PointToBuffer = 0;
 
 uint8_t ui8a_receiveBuffer[MAX_LEN_LNBUF];
@@ -153,16 +155,17 @@ void HandleLocoNetMessages()
 					{
 						if (slot != 0x00)
 						{
-							SlotTabelle[slot].ucSTAT |= (1 << 5) | (1 << 4);
+							SlotTabelle[slot].ucSTAT |= (1 << 5) | (1 << 4); // set busy and active
 							Slot_SL_RD(slot);
 						}
 						else
-							Slot_SL_RD(2);
+							Slot_SL_RD(2);  // 'BA 00 00 45' received -> dispatch
 					}
 					if ((slot != 0x00) && (LnPacket->data[2] == 0x00))
 					{
-						SlotTabelle[slot].ucSTAT &= ~(1 << 4);
-						SlotTabelle[slot].ucSTAT |= (1 << 5);
+            // 'BA xx 00 <chk>' received -> undispatch
+						SlotTabelle[slot].ucSTAT &= ~(1 << 4);  // set inactive
+						SlotTabelle[slot].ucSTAT |= (1 << 5);   // set busy
 					}					
 					break;
 
@@ -177,12 +180,12 @@ void HandleLocoNetMessages()
 				default:  // ignore packets that we don't want to handle
 					break;
 			} // switch (LnPacket->data[0])
-		}
+		} // if (slot < SLOTMAX)
 
   } // if(LnPacket)
 }
 
-char MasterReplyLAck(uint8_t ucRequestOpc, uint8_t ucParam)
+void MasterReplyLack(uint8_t ucRequestOpc, uint8_t ucParam)
 {
 	ucRequestOpc &= 0x7F;
 	ucParam      &= 0x7F;
@@ -204,9 +207,8 @@ char MasterReplyLAck(uint8_t ucRequestOpc, uint8_t ucParam)
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
     Printout('T');
 #endif
-    return LocoNet.send(LnPacket);  // Send the packet to the LocoNet
+    LocoNet.send(LnPacket);  // Send the packet to the LocoNet
   }
-  return 0;
 }
 
 void Slot_SL_RD(uint8_t slot)
@@ -214,9 +216,11 @@ void Slot_SL_RD(uint8_t slot)
   uint16_t ui16LocoAddress(SlotTabelle[slot].ucADR  + (SlotTabelle[slot].ucADR2 >> 7));
   if((!bShowFrediSV && !ui16LocoAddress) || (slot >= SLOTMAX))
   {
-    MasterReplyLAck(0x3A, 0x00);
+    MasterReplyLack(0x3A, 0x00);
     return;
   }
+  if(bShowFrediSV && !ui16LocoAddress)
+    SlotTabelle[slot].ucADR = DEFAULT_LOCO_ADDRESS;  // to have a valid locoaddress in case of dispatch
 
   uint8_t ui8_ChkSum(OPC_SL_RD_DATA ^ 0x0e ^ slot ^ SlotTabelle[slot].ucSTAT ^ SlotTabelle[slot].ucADR ^ SlotTabelle[slot].ucSPD ^ SlotTabelle[slot].ucDIRF ^ 0x05 ^ SlotTabelle[slot].ucSS2 ^ SlotTabelle[slot].ucADR2 ^ SlotTabelle[slot].ucSND ^ SlotTabelle[slot].ucID1 ^ SlotTabelle[slot].ucID2 ^ 0xFF);  //XOR
   bitWrite(ui8_ChkSum, 7, 0);     // set MSB zero
@@ -264,7 +268,7 @@ void write_SL_Data(rwSlotDataMsg SL_Data)
 	SlotTabelle[slot].ucID1  = SL_Data.id1;
 	SlotTabelle[slot].ucID2  = SL_Data.id2;
 
-	MasterReplyLAck(0x6f, 0x7f);
+	MasterReplyLack(0x6f, 0x7f);
 	adr_lcd(slot);
 }
 

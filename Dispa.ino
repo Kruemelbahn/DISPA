@@ -88,19 +88,16 @@ discrete In/Outs used for functionalities:
 #if defined LCD && defined OLED
   #error LCD and OLED defined
 #endif
-#if !defined OLED
-  #if !defined LCD
+#if !defined OLED && !defined LCD
     #error Neither LCD nor OLED defined
-  #endif
-  #if defined FREDI_SV
-    #error OLED define for FREDI_SV missing
-  #endif
 #endif
     
 #include <HeartBeat.h>
 HeartBeat oHeartbeat;
 
 //========================================================
+#define SW_VERSION "2.2"
+#define SW_YEAR    "2024"
 
 #include <LocoNet.h>  // used to include ln_opc.h
 #include "LocoNetFrediSV.h"
@@ -130,6 +127,7 @@ static uint8_t trk = 0x05;
 uint16_t zahl = 0;
 uint8_t stelle = 0;
 uint8_t fahrstufen = 1;
+extern uint8_t iyLineOffset;
 
 uint8_t ret_slot(uint8_t adr, uint8_t adr2)
 {
@@ -174,7 +172,7 @@ static const StatTable_t statTable[COUNT] =
 
 static const char* Stat1ToString(unsigned char s) 
 {
-  for(int i = 0; i < COUNT; i++) 
+  for(uint8_t i = 0; i < COUNT; i++) 
 		if( ( s & DEC_MODE_MASK ) == statTable[i].stat1Val ) 
 			return statTable[i].stringVal;
  	return "?   ";
@@ -187,7 +185,7 @@ static void adr_lcd(uint8_t slot)
   if(bShowFrediSV)
     return;
 
-	lcd_clrxy(0, 0, 16);
+	lcd_clearLine(0);
 	lcd_goto(0, 0);
 	lcd_write("Alt: ");
 	if (slot < SLOTMAX)
@@ -211,7 +209,7 @@ static void adr_lcd(uint8_t slot)
 
 static void SlotManager(uint8_t adr, uint8_t adr2)
 {
-	int slot(ret_slot(adr, adr2));
+	uint8_t slot(ret_slot(adr, adr2));
 	if (slot == 0)
 	  slot = get_slot(adr, adr2);
 	if (slot > 0)
@@ -274,9 +272,24 @@ void fahrstufenCHG()
 	lcd_write(Stat1ToString(SlotTabelle[2].ucSTAT));
 }
 
+void returnToDispatchMode()
+{
+  bShowFrediSV = false;
+#if defined OLED  
+  iyLineOffset = 0;
+#endif
+  lcd_title();
+  lcd_goto(0, 1);
+  lcd_write("Neu: ");
+  fahrstufen = 1;
+  fahrstufenCHG();
+}
+
 void HandleTastatur()
 {
 	uint8_t taste(get_Tastatur());
+  if (taste == 66)
+    return;
   if(!bShowFrediSV)
   {
     if (taste == 99)  // '*'
@@ -284,37 +297,23 @@ void HandleTastatur()
       stelle = 0;
       zahl = 0;
       disp_put();
-      taste = 66;
       lcd_clrxy(5, 1, 7);
     }
-    if (taste == 98)  // '#'
-    {
-      taste = 66;
+    else if (taste == 98)  // '#'
       fahrstufenCHG();
-    }
+    else
+      readzahl(taste);
   }    
 #if defined FREDI_SV
   else
   {
-    if(taste == 1)
-      lcd_SV_Part1();
-    if(taste == 2)
-      lcd_SV_Part2();
-    if(taste == 3)
-      lcd_SV_Part3();
-    if(taste == 4)
-      lcd_SV_Part4();
-    if(taste == 5)
-      lcd_SV_Part5();
-    if(taste == 6)
-      lcd_SV_Part6();
-    if(taste == 7)
-      lcd_SV_Part7();
-    taste = 66;
+    if (taste == 99)  // '*'
+      // switch from SV-Mode to dispatch-mode:
+      returnToDispatchMode();
+    else
+      lcd_Handle_SVPages(taste);
   }
 #endif
-	if (taste != 66)
-	  readzahl(taste);
 }
 
 void setup()
@@ -339,20 +338,18 @@ void setup()
   lcd_init();
 
   lcd_title();
-  lcd_clear();
-  lcd_goto(0, 1);
 
 #if defined FREDI_SV
   setupForFrediSV();
   if(!bShowFrediSV)
 #endif
   {
+    lcd_goto(0, 1);
     lcd_write("Neu: ");
     fahrstufen = 1;
     fahrstufenCHG();
   }
 }
-
 
 void loop()
 {
@@ -362,3 +359,6 @@ void loop()
   HandleLocoNetMessages();
 	HandleTastatur();
 }
+
+// to keep heartbeat alive during delay
+void yield(void) { oHeartbeat.beat(); }

@@ -48,17 +48,6 @@ void lcd_clrxy(uint8_t x, uint8_t y, uint8_t count)
   displayPanel.setCursor(x, y + iyLineOffset);
 }
 
-void lcd_binary(uint8_t ui8_Out)
-{
-  displayPanel.print(ui8_Out, BIN);
-}
-
-void lcd_HexAsDec(uint8_t ui8_Out)
-{
-  displayPanel.print((uint8_t)(ui8_Out / 16), DEC);
-  displayPanel.print((uint8_t)(ui8_Out % 16), DEC);
-}
-
 void lcd_wordAsDec(uint16_t ui16_Out)
 {
   // 4 digits, 0..9999
@@ -87,16 +76,30 @@ void lcd_title()
 {
   displayPanel.clear();
   lcd_goto(0, 1);
-	displayPanel.print("FRANZ 2.1 (aka DISPA)");
+	displayPanel.print("DISPA ");
+  displayPanel.print(SW_VERSION);
+  displayPanel.print(" (fka FRANZ)");
   lcd_goto(1, 2);
 	displayPanel.print("(c)Kr");
 	displayPanel.print(char(0xFC));  // ü
-	displayPanel.print("melsoft 2023");
+	displayPanel.print("melsoft ");
+  displayPanel.print(SW_YEAR);
 
   iyLineOffset = 4;
 }
 
 #if defined FREDI_SV
+void lcd_binary(uint8_t ui8_Out)
+{
+  displayPanel.print(ui8_Out, BIN);
+}
+
+void lcd_HexAsDec(uint8_t ui8_Out)
+{
+  displayPanel.print((uint8_t)(ui8_Out / 16), DEC);
+  displayPanel.print((uint8_t)(ui8_Out % 16), DEC);
+}
+
 void lcd_Processor(uint8_t iType)
 {
   switch(iType)
@@ -109,12 +112,22 @@ void lcd_Processor(uint8_t iType)
   }
 }
 
+void lcd_Handle_SVPages(uint8_t taste)
+{
+  if(taste == 1)
+    lcd_SV_Part1();
+  else if(taste == 2)
+    lcd_SV_Part2();
+  else if(taste == 3)
+    lcd_SV_Part3();
+}
+
 void lcd_SV_Part1()
 {
   for(uint8_t y = 1; y < 8; y++)
     displayPanel.clearLine(y);
 
-  iyLineOffset = 1;
+  iyLineOffset = 0;
   lcd_goto(0, 0);
   displayPanel.print("FREDI-SV - Part 1");
   lcd_goto(1, 2);
@@ -148,7 +161,6 @@ void lcd_SV_Part2()
   for(uint8_t y = 1; y < 8; y++)
     displayPanel.clearLine(y);
 
-  iyLineOffset = 1;
   lcd_goto(0, 0);
   displayPanel.print("FREDI-SV - Part 2");
   lcd_goto(1, 2);
@@ -198,7 +210,6 @@ void lcd_SV_Part2()
     displayPanel.print("Forw-Off-Rev-Switch");
   else
     displayPanel.print("Forw-Rev-Switch");
-   ++ui8Line;
 }
 
 void lcd_SV_Part3()
@@ -206,7 +217,6 @@ void lcd_SV_Part3()
   for(uint8_t y = 1; y < 8; y++)
     displayPanel.clearLine(y);
 
-  iyLineOffset = 1;
   lcd_goto(0, 0);
   displayPanel.print("FREDI-SV - Part 3");
   lcd_goto(1, 2);
@@ -245,14 +255,6 @@ void lcd_SV_Part3()
     displayPanel.print(GetSV(44), DEC);
   }      
 }
-
-// nothing to do for OLED, but may be later for LCD
-void lcd_SV_Part4() {}
-
-void lcd_SV_Part5() {}
-
-void lcd_SV_Part6() {}
-
-void lcd_SV_Part7() {}
 #endif // defined FREDI_SV
+
 #endif // defined OLED

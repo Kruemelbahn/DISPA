@@ -1,5 +1,5 @@
 //=== LocoNet support for E5-Telegram for DISPA ==================
-//=== taken from:
+//=== partially taken from:
 //=== LocoNet support for E5-Telegram === usable for all =========
 #if defined ENABLE_LN_E5
 #include <LocoNet.h>

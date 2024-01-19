@@ -1,9 +1,10 @@
 
-// for compatibility with 'LocoNetE5ForDispa.ino'
   extern boolean bShowFrediSV;
   extern uint16_t ui16_ThrottleId;
 
 #if defined FREDI_SV
+  
+  // for compatibility with 'LocoNetE5ForDispa.ino'
   #define ENABLE_LN_E5          (1)
   #define SV2_Format_2	        0x02
 
@@ -28,6 +29,7 @@
     for (uint8_t i = 0; i < GetCVCount(); i++)
       FrediSvValues[i] = 0;
   }
+  
   void WriteCVtoEEPROM(uint8_t ui8_Index, uint16_t ui16_Value)
   {
     if (ui8_Index < GetCVCount())
