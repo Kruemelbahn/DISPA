@@ -16,6 +16,7 @@ In Dispa.ino you can select whether the software should be compiled<br>
 ### Requested libraries
 DISPA requires my libraries listed below in addition to various Arduino standard libraries:<br> 
 - [HeartBeat](https://www.github.com/Kruemelbahn/HeartBeat)<br>
+- [I2CKeypad](http://www.github.com/Kruemelbahn/I2CKeypad)<br>
 - [LCDPanel](https://www.github.com/Kruemelbahn/LCDPanel)<br>
 - [OLEDPanel](https://www.github.com/Kruemelbahn/OLEDPanel)<br>
 
