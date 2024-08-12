@@ -36,7 +36,7 @@
       FrediSvValues[ui8_Index] = (uint8_t)(ui16_Value);
   }
 
-// ===end=== for compatibility with 'LocoNetE5.ino'
+// ===end=== for compatibility with 'LocoNetE5ForDispa.ino'
 
   const uint8_t GetSV(uint8_t ui8_Index)
   {

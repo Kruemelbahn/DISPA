@@ -4,15 +4,14 @@
 #include <LocoNet.h>  // used to include ln_opc.h
 #include <OLEDPanel.h>
 
-uint8_t FrediSvToRead[] = { 2, 3, 4, 5, 6, 11, 12, 13, 14, 15, 16, 17, 43, 44, 255 };  // last one is 255, which indicates the end of this list
+uint8_t FrediSvToRead[] = { 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 43, 44, 255 };  // last one is 255, which indicates the end of this list
 
 extern lnMsg *LnPacket;
-extern uint8_t iyLineOffset;
 
 uint8_t iCount(0);
 unsigned long ul_WaitTelegram(0);
 
-boolean isButtonStarPressed()
+uint8_t isButtonStarOrHashPressed()
 {
   uint8_t ui8_KPDi2cAddress(getKPDAdddress());
   if(ui8_KPDi2cAddress)
@@ -26,9 +25,11 @@ boolean isButtonStarPressed()
     uint8_t val(Wire.read());
     Wire.endTransmission();
     if(val == 0b11100111)
-      return true;
+      return SPECIAL_BUTTON::STAR;  // '*'
+    if(val == 0b10110111)
+      return SPECIAL_BUTTON::HASH;  // '#'
   }
-  return false;  
+  return -1;  
 }
 
 boolean CheckForCommunicationError(uint8_t ui8SecondsToWait)
@@ -46,14 +47,14 @@ boolean CheckForCommunicationError(uint8_t ui8SecondsToWait)
   if((millis() - ul_WaitTelegram) > (ui8SecondsToWait * 1000))
   {
 #if defined DEBUG
-    Serial.println("Communication error");
+    Serial.println(F("Communication error"));
 #endif
     lcd_clearLine(0);
     lcd_goto(0, 1);
 #if defined LCD
-    lcd_write("Communicat.error");
+    lcd_write(F("Communicat.error"));
 #else
-    lcd_write("Communication error");
+    lcd_write(F("Communication error"));
 #endif
     // we will stay in 'setup()' until '*' is pressed
     while(true)
@@ -62,7 +63,7 @@ boolean CheckForCommunicationError(uint8_t ui8SecondsToWait)
       // light the Heartbeat LED
       oHeartbeat.beat();
 
-      if (isButtonStarPressed()) // '*' BUTTON_STAR
+      if (isButtonStarOrHashPressed() == SPECIAL_BUTTON::STAR) // '*' BUTTON_STAR
         return true;
     }
   }
@@ -71,15 +72,18 @@ boolean CheckForCommunicationError(uint8_t ui8SecondsToWait)
 
 void setupForFrediSV()
 {
-	if (!isButtonStarPressed()) // '*' BUTTON_STAR
+	if (isButtonStarOrHashPressed() != SPECIAL_BUTTON::STAR) // '*' BUTTON_STAR
     return;
   // '*' BUTTON_STAR has to be pressed during power on for more then 2 seconds to enter FREDI-diagnostic-mode
   delay(2000);
-  if (!isButtonStarPressed())
+  if (isButtonStarOrHashPressed() != SPECIAL_BUTTON::STAR)
     return;
 
   lcd_goto(0, 0);
-  lcd_write("Dispatch FREDI");
+  lcd_write(F("Release *-Button"));
+  while(isButtonStarOrHashPressed() == SPECIAL_BUTTON::STAR);
+  lcd_goto(0, 0);
+  lcd_write(F("Connect&Dispatch"));
 
   bShowFrediSV = true;
   SetCVsToDefault(); 
@@ -102,12 +106,12 @@ void setupForFrediSV()
     }
   }
 #if defined DEBUG
-  Serial.print("Throttle-ID: 0x");
+  Serial.print(F("Throttle-ID: 0x"));
   Serial.println(ui16_ThrottleId, HEX);
 #endif
   delay(100);
 
-  // telegram for read one SV:
+  // telegram to read one SV:
   // E5 10 01 02 02 10 <id_l> <id_h> <sv_l> <sv_h> 10 00       00 00 00 01
   // answer:
   // E5 10 01 42 02 10 <id_l> <id_h> <sv_l> <sv_h> 10 <sv_val> 00 00 00 01

@@ -19,12 +19,22 @@ static  LnBuf   LnTxBuffer;
 // A8 is already used by FRED  and defined as OPC_DEBUG
 // A8 is already used by FREDI and defined as OPC_FRED_BUTTON
 // AF is already used by FREDI and defined as OPC_SELFTEST resp. as OPC_FRED_ADC
+// D4 is already used  and defined as OPC_UHLI_FUN
 // ED is already used  and defined as OPC_IMM_PACKET
 // EE is already used  and defined as OPC_IMM_PACKET_2
 
 #define   TX_PIN   7
 
 //=== keep informations for telegram-sequences ===================
+
+#if defined FREDI_SV
+  #if not defined OPC_LOCO_F912
+    #define OPC_LOCO_F912       0xA3
+  #endif
+  #if not defined OPC_UHLI_FUN
+    #define OPC_UHLI_FUN        0xD4
+  #endif
+#endif
 
 //=== functions for receiving telegrams from SerialMonitor =======
 // Eingabe Byteweise
@@ -131,6 +141,44 @@ void HandleLocoNetMessages()
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL
 		Printout('R');
 #endif
+#if defined FREDI_SV
+    /*
+      FREDI-Diagnostic:
+      receive speed- and function-telegrams and keep their values for display - neither more nor less
+      thus the values 'slot', 'locoaddress' and 'status' are not used and therefore ignored
+      messages below are without any response
+    */
+    switch (LnPacket->data[0])
+    {
+      case OPC_LOCO_SPD:  // 0xA0
+        ui8_currentLocoSpeed = LnPacket->data[2];
+        break;
+      case OPC_LOCO_DIRF: // 0xA1
+        ui8_currentFunctions[0] = LnPacket->data[2];
+        break;
+      case OPC_LOCO_SND:  // 0xA2
+        ui8_currentFunctions[1] = LnPacket->data[2]; 
+         break;
+      case OPC_LOCO_F912: // 0xA3
+        ui8_currentFunctions[2] = LnPacket->data[2]; 
+        break;
+      case OPC_UHLI_FUN:  // 0xD4
+        if((LnPacket->data[1] == 0x20) && (LnPacket->data[3] == 0x08))
+          ui8_currentFunctions[3] = LnPacket->data[4]; // Arg4
+        break;
+      case OPC_IMM_PACKET:  // 0xED
+        if((LnPacket->data[1] == 0x0B) && (LnPacket->data[3] == 0x7F))
+        {
+          if((LnPacket->data[3] == 0x34) && (LnPacket->data[6] == 0x5E)) // short address
+            ui8_currentFunctions[3] = LnPacket->data[7]; // IM3
+          if((LnPacket->data[3] == 0x44) && (LnPacket->data[7] == 0x5E)) // long address
+            ui8_currentFunctions[3] = LnPacket->data[8]; // IM4
+        }
+        break;
+      default:  // ignore packets that we don't want to handle
+        break;
+    }
+#endif
 		uint8_t slot(LnPacket->data[1]);
 		if (slot < SLOTMAX)
 		{
@@ -144,11 +192,11 @@ void HandleLocoNetMessages()
 					Slot_SL_RD(slot);
 					break;
 
-				case OPC_MOVE_SLOTS:	// 0xBA
+				case OPC_MOVE_SLOTS:	// 0xBA = 'Dispatch Get' vom FRED
 #if defined DEBUG
-          Serial.print("LnPacket->data[2]:");
+          Serial.print(F("LnPacket->data[2]:"));
           Serial.println(LnPacket->data[2]);
-          Serial.print("slot:");
+          Serial.print(F("slot:"));
           Serial.println(slot);
 #endif
 					if (LnPacket->data[2] == slot)
@@ -159,7 +207,7 @@ void HandleLocoNetMessages()
 							Slot_SL_RD(slot);
 						}
 						else
-							Slot_SL_RD(2);  // 'BA 00 00 45' received -> dispatch
+							Slot_SL_RD(2);  // 'BA 00 00 45' received -> dispatch = sendet 'Slot Read' als Antwort der Zentrale
 					}
 					if ((slot != 0x00) && (LnPacket->data[2] == 0x00))
 					{
@@ -169,14 +217,13 @@ void HandleLocoNetMessages()
 					}					
 					break;
 
-				case OPC_WR_SL_DATA:	// 0xEF
-					write_SL_Data(LnPacket->sd);
+				case OPC_WR_SL_DATA:	// 0xEF = 'Write Slot' vom FRED als Antwort auf 'Slot Read' der Zentrale
+					write_SL_Data(LnPacket->sd);  // speichert die Daten vom FRED und sendet ein LACK (B4 6F 00 5B)
 					break;
 
 				case OPC_LONG_ACK:		// 0xB4
 				case OPC_SL_RD_DATA:	// 0xE7
 					break;  // ignore our own replies silently
-
 				default:  // ignore packets that we don't want to handle
 					break;
 			} // switch (LnPacket->data[0])
@@ -228,7 +275,7 @@ void Slot_SL_RD(uint8_t slot)
 	addByteLnBuf( &LnTxBuffer, OPC_SL_RD_DATA); //0xE7
 	addByteLnBuf( &LnTxBuffer, 0x0e);
 	addByteLnBuf( &LnTxBuffer, slot);
-	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSTAT);
+	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSTAT); // includes status and decodertype in lower 3 bits (.... .XXX)
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucADR);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSPD);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucDIRF);
@@ -279,7 +326,7 @@ void Printout(char ch)
   {
     // print out the packet in HEX
     Serial.print(ch);
-    Serial.print("X: ");
+    Serial.print(F("X: "));
     uint8_t ui8_msgLen = getLnMsgSize(LnPacket); 
     for (uint8_t i = 0; i < ui8_msgLen; i++)
     {

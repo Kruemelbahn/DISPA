@@ -48,6 +48,8 @@
             - DEBUG-support added
             2023-11-17 by Michael Zimmermann
             - added functionality for read and show of most interesting FrediSVs
+            2024-08-11 by Michael Zimmermann
+            - added functionality for read and show of SV8...10, FREDI-Test added
   
 used I²C-Addresses:
   - 0x78  OLED-Panel ggf. mit
@@ -96,8 +98,8 @@ discrete In/Outs used for functionalities:
 HeartBeat oHeartbeat;
 
 //========================================================
-#define SW_VERSION "2.2"
-#define SW_YEAR    "2024"
+#define SW_VERSION F("2.3")
+#define SW_YEAR    F("2024")
 
 #include <LocoNet.h>  // used to include ln_opc.h
 #include "LocoNetFrediSV.h"
@@ -107,6 +109,8 @@ HeartBeat oHeartbeat;
   #define BUTTON_KEYPAD 0x80
   #define BUTTON_STAR   0x40
 #endif
+
+enum SPECIAL_BUTTON { NONE = 66, HASH = 98, STAR = 99 };
 
 typedef struct
 {
@@ -121,13 +125,22 @@ typedef struct
 	unsigned char ucID2;
 } SSlotData_t;
 
-const uint8_t SLOTMAX = 28;
+const uint8_t SLOTMAX(28);
 static SSlotData_t SlotTabelle[SLOTMAX];
-static uint8_t trk = 0x05;
-uint16_t zahl = 0;
-uint8_t stelle = 0;
-uint8_t fahrstufen = 1;
-extern uint8_t iyLineOffset;
+static uint8_t trk(0x05);
+uint16_t zahl(0);
+uint8_t stelle(0);
+uint8_t fahrstufen(1);
+uint8_t iyLineOffset(0);
+
+bool bFREDITestActive(false);
+#ifdef FREDI_SV
+  const uint8_t FCT_GROUPS(4);
+  uint8_t ui8_currentLocoSpeed(0);
+  uint8_t ui8_currentFunctions[FCT_GROUPS] {0};
+  uint8_t ui8_mirrorLocoSpeed(0);
+  uint8_t ui8_mirrorFunctions[FCT_GROUPS] {0};
+#endif
 
 uint8_t ret_slot(uint8_t adr, uint8_t adr2)
 {
@@ -167,7 +180,7 @@ static const StatTable_t statTable[COUNT] =
 	{ DEC_MODE_128,   "128 " },
 	{ DEC_MODE_28,    "28  " },
 	{ DEC_MODE_14,    "14  " },
-	{ DEC_MODE_28TRI, "M** " }
+	{ DEC_MODE_28TRI, "M28 " }
 };
 
 static const char* Stat1ToString(unsigned char s) 
@@ -187,7 +200,7 @@ static void adr_lcd(uint8_t slot)
 
 	lcd_clearLine(0);
 	lcd_goto(0, 0);
-	lcd_write("Alt: ");
+	lcd_write(F("Alt: "));
 	if (slot < SLOTMAX)
 	{
 		if (SlotTabelle[slot].ucADR2 > 0)
@@ -201,7 +214,7 @@ static void adr_lcd(uint8_t slot)
 
 #if defined OLED
 	lcd_goto(0, 3);
-	lcd_write("ThrottleID: 0x");
+	lcd_write(F("ThrottleID: 0x"));
 	if (slot < SLOTMAX)
 		lcd_wordAsHex((SlotTabelle[slot].ucID2 << 8) + SlotTabelle[slot].ucID1);
 #endif
@@ -249,15 +262,15 @@ uint8_t get_Tastatur()
   getEditValueFromKeypad(true, 9, &ui16_EditValue, &ui8_buttons);
 
   if(ui8_buttons & BUTTON_SELECT)  // '#'
-		return 98;
+		return SPECIAL_BUTTON::HASH;
 
   if(ui8_buttons & BUTTON_STAR)  // '*'
-		return 99;
+		return SPECIAL_BUTTON::STAR;
 
   if(ui8_buttons & BUTTON_KEYPAD)  // '0'...'9'
 		return (uint8_t)(ui16_EditValue);
 
-  return 66;
+  return SPECIAL_BUTTON::NONE;
 }
 
 void fahrstufenCHG()
@@ -275,31 +288,38 @@ void fahrstufenCHG()
 void returnToDispatchMode()
 {
   bShowFrediSV = false;
+  bFREDITestActive = false;
+  
 #if defined OLED  
   iyLineOffset = 0;
 #endif
   lcd_title();
   lcd_goto(0, 1);
-  lcd_write("Neu: ");
+  lcd_write(F("Neu: "));
   fahrstufen = 1;
   fahrstufenCHG();
 }
 
 void HandleTastatur()
 {
+#if defined FREDI_SV
+  if(bShowFrediSV)
+    lcd_Handle_Dynamic_TestPage(); // dynamic page, handle always when requested
+#endif
+
 	uint8_t taste(get_Tastatur());
-  if (taste == 66)
+  if (taste == SPECIAL_BUTTON::NONE)
     return;
   if(!bShowFrediSV)
   {
-    if (taste == 99)  // '*'
+    if (taste == SPECIAL_BUTTON::STAR)  // '*'
     {
       stelle = 0;
       zahl = 0;
       disp_put();
       lcd_clrxy(5, 1, 7);
     }
-    else if (taste == 98)  // '#'
+    else if (taste == SPECIAL_BUTTON::HASH)  // '#'
       fahrstufenCHG();
     else
       readzahl(taste);
@@ -307,11 +327,11 @@ void HandleTastatur()
 #if defined FREDI_SV
   else
   {
-    if (taste == 99)  // '*'
+    if (taste == SPECIAL_BUTTON::STAR)  // '*'
       // switch from SV-Mode to dispatch-mode:
       returnToDispatchMode();
     else
-      lcd_Handle_SVPages(taste);
+      lcd_Handle_Static_SVPages(taste);
   }
 #endif
 }
@@ -345,7 +365,7 @@ void setup()
 #endif
   {
     lcd_goto(0, 1);
-    lcd_write("Neu: ");
+    lcd_write(F("Neu: "));
     fahrstufen = 1;
     fahrstufenCHG();
   }
