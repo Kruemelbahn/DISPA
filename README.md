@@ -11,10 +11,13 @@ Version 2.2 supports the reading of Parameters from FREDI using the LNSV2-protoc
 Version 2.3 supports the reading of Parameter SV8...10 from FREDI using the LNSV2-protocol either with OLED or LCD.
             new testpage for showing speed, direction and state of function F0...F16 of the connected FREDI
 
-In Dispa.ino you can select whether the software should be compiled<br> 
-- for usage with LCD or OLED.<br>
-- with or without reading FREDI-SVs including a testpage.<br>
-  For the meaning of SVs please refer to the footnote in chapter 2.3 "FREDI-Diagnose" in the [manual](Documentation/Dispa.pdf)<br>
+Version 2.4 supports the reading of Parameter SV18...34 from FREDI using the LNSV2-protocol either with OLED or LCD.
+            supports QR-Code-Reader and direct transfering QR-Code-data to the FREDI,
+            please refer to chapter 2.4 "QR-Code-Leser" in the [manual](Documentation/Dispa.pdf)
+
+In Dispa.ino you can select whether the software should be compiled for usage with LCD or OLED.<br>
+
+DispaSetup is a small utility for testing OLED and keyboard.
 
 ### Requested libraries
 DISPA requires my libraries listed below in addition to various Arduino standard libraries:<br> 

@@ -85,6 +85,19 @@ void lcd_title()
   iyLineOffset = 4;
 }
 
+void lcd_owner_name(const char *sOwner, const char *sName)
+{
+  lcd_clrxy(0, 2, 21);  // is line 6 (iyLineOffset = 4 is active)
+  if(sOwner && (strlen(sOwner) > 0))
+    lcd_write(sOwner);
+  if(sName && (strlen(sName) > 0))
+  {
+    if(sOwner && (strlen(sOwner) > 0))
+      lcd_write("=");
+    lcd_write(sName);
+  }
+}
+
 #if defined FREDI_SV
 
 void lcd_binary(uint8_t ui8_Out)
@@ -135,6 +148,8 @@ void lcd_Handle_Static_SVPages(uint8_t taste)
     lcd_SV_Part3();
   else if(taste == 4)
     lcd_SV_Part4();
+  else if(taste == 5)
+    lcd_SV_Part5();
   else if (!bFREDITestActive && (taste == SPECIAL_BUTTON::HASH))  // '#'
   {
     const uint16_t ui16LocoAddress((GetSV(8) << 7) + GetSV(9));
@@ -194,7 +209,7 @@ void lcd_SV_Part2()
   switch(GetSV(10) & 0x07)
   {
     case  0: displayPanel.print(F("28 FS")); break;
-    case  1: displayPanel.print(F("M28 FS")); break;
+    case  1: displayPanel.print(F("28M FS")); break;
     case  2: displayPanel.print(F("14 FS")); break;
     case  3: displayPanel.print(F("128 FS")); break;
     case  4: displayPanel.print(F("28A FS")); break;
@@ -204,7 +219,7 @@ void lcd_SV_Part2()
 
   lcd_goto(1, 4);
   displayPanel.print(F("SV11   : ")); // operating mode
-  if(GetSV(11) == 0x55)
+  if(GetSV(11) == SKIP_SELF_TEST)
     displayPanel.print(F("operating"));
   else if(GetSV(11) == 0xFF)
     displayPanel.print(F("selftest"));
@@ -317,6 +332,28 @@ void lcd_SV_Part4()
 }
 
 #define FCT_ROW 5
+void lcd_SV_Part5()
+{
+  bFREDITestActive = false;
+  
+  for(uint8_t y = 1; y < 8; y++)
+    displayPanel.clearLine(y);
+
+  lcd_goto(0, 0);
+  displayPanel.print(F("FREDI-SV - Part 5"));
+  lcd_goto(1, 2);
+  displayPanel.print(F("SV18...34")); // F-status
+  
+  lcd_goto(11, 3);
+  displayPanel.print(F("1111111"));
+  lcd_goto(0, 4);
+  displayPanel.print(F("F01234567890123456"));
+  lcd_goto(1, FCT_ROW);
+
+  for(uint8_t iSvNo = 18; iSvNo < 35; iSvNo++)
+    displayPanel.print(!GetSV(iSvNo) ? '0' : '1');
+}
+
 void lcd_FREDI_InitTest()
 {
   bFREDITestActive = true;

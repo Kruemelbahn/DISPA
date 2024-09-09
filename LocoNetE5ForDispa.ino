@@ -1,37 +1,22 @@
 //=== LocoNet support for E5-Telegram for DISPA ==================
 //=== partially taken from:
 //=== LocoNet support for E5-Telegram === usable for all =========
-#if defined ENABLE_LN_E5
 #include <LocoNet.h>
 
 //=== functions ==================================================
-boolean TelegramE5ForUs()
-{
-  uint16_t ui16DeviceId(((LnPacket->data[5] & 0x01) << 7) + (LnPacket->data[6] & 0x7F)); // adr_l == throttle-id low
-  uint16_t ui16SoftwareId(((LnPacket->data[5] & 0x02) << 6) + (LnPacket->data[7] & 0x7F)); // adr_h == throttle-id high
-	if ((ui16DeviceId == GetCV(ID_DEVICE)) && 
- 		  (ui16SoftwareId == GetCV(SOFTWARE_ID))
-     )
-    return true;
-	return false;
-}
-
 boolean HandleE5MessageForFrediSv()
 {
   if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
   {
-    if (TelegramE5ForUs())
+    // SV_ADRL
+    uint8_t ui8_LSBAdr(((LnPacket->data[5] & 0x04) << 5) + (LnPacket->data[8] & 0x7F));
+    if (LnPacket->data[3] == 0x42)
     {
-      // SV_ADRL
-      uint8_t ui8_LSBAdr(((LnPacket->data[5] & 0x04) << 5) + (LnPacket->data[8] & 0x7F));
-      if (LnPacket->data[3] == 0x42)
-      {
-        // REPLY from SV read : store response D1 in SV-Table:
-        uint8_t ui8_valueLSB(((LnPacket->data[10] & 0x01) << 7) + (LnPacket->data[11] & 0x7F));    // D1
-        WriteCVtoEEPROM(ui8_LSBAdr, ui8_valueLSB);
-        return true;
-      } // if (LnPacket->data[3] == 0x42)
-    } // if (TelegramE5ForUs())
+      // REPLY from SV read : store response D1 in SV-Table:
+      uint8_t ui8_valueLSB(((LnPacket->data[10] & 0x01) << 7) + (LnPacket->data[11] & 0x7F));    // D1
+      WriteCVtoEEPROM(ui8_LSBAdr, ui8_valueLSB);
+      return true;
+    } // if (LnPacket->data[3] == 0x42)
   } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
   return false;
 }
@@ -96,4 +81,3 @@ boolean sendE5Telegram(uint8_t src, uint8_t cmd, uint8_t svx1, uint8_t dst_l, ui
     return true;
   }
 }
-#endif // #if defined ENABLE_LN_E5

@@ -46,10 +46,12 @@
             - with OLED (or LCD)
             - and display ThrottleID on OLED
             - DEBUG-support added
-            2023-11-17 by Michael Zimmermann
+            2023-11-17 V2.2 by Michael Zimmermann
             - added functionality for read and show of most interesting FrediSVs
-            2024-08-11 by Michael Zimmermann
+            2024-08-11 V2.3 by Michael Zimmermann
             - added functionality for read and show of SV8...10, FREDI-Test added
+            2024-08-29 V2.4 by Michael Zimmermann
+            - added functionality for QRCode-Reader
   
 used I²C-Addresses:
   - 0x78  OLED-Panel ggf. mit
@@ -68,13 +70,13 @@ discrete In/Outs used for functionalities:
   -  7 Out used   by LocoNet [TxD]
   -  8 In  used   by LocoNet [RxD]
   -  9 Out LCD-Panel D4
-  - 10 
+  - 10 In  RxD (SofwareSerial, TxD von QR-Code-Scanner)
   - 11 Out LCD-Panel Enable 
   - 12 Out LCD-Panel R/W
-  - 13
-  - 14
+  - 13 Out TxD (SofwareSerial, RxD von QR-Code-Scanner)
+  - 14 In  Button (QR-Code-Scanner)
   - 15
-  - 16
+  - 16 Out LED (QR-Code-Scanner)
   - 17
   - 18     (used by I²C: SDA)
   - 19     (used by I²C: SCL)
@@ -85,7 +87,6 @@ discrete In/Outs used for functionalities:
 
 //#define LCD
 #define OLED
-#define FREDI_SV
 
 #if defined LCD && defined OLED
   #error LCD and OLED defined
@@ -94,11 +95,16 @@ discrete In/Outs used for functionalities:
     #error Neither LCD nor OLED defined
 #endif
     
+// keep following defines - unless there are problems with them:
+#define FREDI_SV
+#define QRCODE
+#define SEND_QRCODE_DATA
+
 #include <HeartBeat.h>
 HeartBeat oHeartbeat;
 
 //========================================================
-#define SW_VERSION F("2.3")
+#define SW_VERSION F("2.4")
 #define SW_YEAR    F("2024")
 
 #include <LocoNet.h>  // used to include ln_opc.h
@@ -125,15 +131,27 @@ typedef struct
 	unsigned char ucID2;
 } SSlotData_t;
 
+const uint8_t DEC_STEPS(1);
+const uint8_t SKIP_SELF_TEST(0x55);
+const uint8_t EMERGENCY_STOP(0x01);
 const uint8_t SLOTMAX(28);
 static SSlotData_t SlotTabelle[SLOTMAX];
 static uint8_t trk(0x05);
+uint16_t ui16_ThrottleId(0);
 uint16_t zahl(0);
 uint8_t stelle(0);
-uint8_t fahrstufen(1);
+uint8_t fahrstufen(DEC_STEPS);
 uint8_t iyLineOffset(0);
 
+// 0x01 = E5 can be send
+// 0x02 = E5 sended, waits for answer
+// 0x03 = E5 answer is ok
+// 0x04 = E5 sends function states
+// 0x80 = E5 answer is faulty
+uint8_t ui8FlagSendingDisptach(0);
 bool bFREDITestActive(false);
+bool bReadFromQRCode(false);
+boolean bShowFrediSV(false);
 #ifdef FREDI_SV
   const uint8_t FCT_GROUPS(4);
   uint8_t ui8_currentLocoSpeed(0);
@@ -172,18 +190,18 @@ typedef struct
 	char stringVal[5];
 } StatTable_t;
 
-#define COUNT 6
+const uint8_t COUNT(6);
 static const StatTable_t statTable[COUNT] =
 {
-	{ DEC_MODE_128A,  "128A" },
-	{ DEC_MODE_28A,   "28A " },
-	{ DEC_MODE_128,   "128 " },
-	{ DEC_MODE_28,    "28  " },
-	{ DEC_MODE_14,    "14  " },
-	{ DEC_MODE_28TRI, "M28 " }
+	{ DEC_MODE_128A,  "128A" }, // 0000 0111 (STAT1_SL_SPDEX | STAT1_SL_SPD14 | STAT1_SL_SPD28)
+	{ DEC_MODE_28A,   "28A " }, // 0000 0100 (STAT1_SL_SPDEX)
+	{ DEC_MODE_128,   "128 " }, // 0000 0011 (STAT1_SL_SPD14 | STAT1_SL_SPD28)
+	{ DEC_MODE_28,    "28  " }, // 0000 0010 (STAT1_SL_SPD14)
+	{ DEC_MODE_14,    "14  " }, // 0000 0001 (STAT1_SL_SPD28)
+	{ DEC_MODE_28TRI, "28M " }  // 0000 0000
 };
 
-static const char* Stat1ToString(unsigned char s) 
+static const char* Stat1ValToString(unsigned char s) 
 {
   for(uint8_t i = 0; i < COUNT; i++) 
 		if( ( s & DEC_MODE_MASK ) == statTable[i].stat1Val ) 
@@ -191,32 +209,37 @@ static const char* Stat1ToString(unsigned char s)
  	return "?   ";
 }
 
+static void lcd_ThrottleId()
+{
+	lcd_clrxy(0, 3, 21); // is line 7 with iyLineOffset = 4
+	lcd_write(F("ThrottleID: 0x"));
+  lcd_wordAsHex(ui16_ThrottleId);
+}
+
 static void adr_lcd(uint8_t slot)
 {
 	if (slot < SLOTMAX)
 		ui16_ThrottleId = (SlotTabelle[slot].ucID2 << 8) + SlotTabelle[slot].ucID1;
+  ui8FlagSendingDisptach = 0;
   if(bShowFrediSV)
     return;
 
 	lcd_clearLine(0);
 	lcd_goto(0, 0);
-	lcd_write(F("Alt: "));
-	if (slot < SLOTMAX)
-	{
-		if (SlotTabelle[slot].ucADR2 > 0)
-			lcd_wordAsDec((SlotTabelle[slot].ucADR2 * 128 + SlotTabelle[slot].ucADR));
-		else
-			lcd_wordAsDec(SlotTabelle[slot].ucADR);
+  lcd_write(F("Alt: "));
+  if (slot < SLOTMAX)
+  {
+    if (SlotTabelle[slot].ucADR2 > 0)
+      lcd_wordAsDec((SlotTabelle[slot].ucADR2 * 128 + SlotTabelle[slot].ucADR));
+    else
+      lcd_wordAsDec(SlotTabelle[slot].ucADR);
 
-		lcd_goto(12, 0);
-		lcd_write(Stat1ToString(SlotTabelle[slot].ucSTAT));
-	}
+    lcd_goto(12, 0);
+    lcd_write(Stat1ValToString(SlotTabelle[slot].ucSTAT));
+  }
 
 #if defined OLED
-	lcd_goto(0, 3);
-	lcd_write(F("ThrottleID: 0x"));
-	if (slot < SLOTMAX)
-		lcd_wordAsHex((SlotTabelle[slot].ucID2 << 8) + SlotTabelle[slot].ucID1);
+  lcd_ThrottleId();
 #endif
 }
 
@@ -231,27 +254,30 @@ static void SlotManager(uint8_t adr, uint8_t adr2)
 
 static void disp_put()
 {
-  uint16_t temp(zahl / 128);
-  uint16_t temp2(zahl - (temp * 128));
-	SlotTabelle[2].ucADR = temp2;
-	SlotTabelle[2].ucADR2 = temp;
-	SlotTabelle[2].ucSPD = 0x1;
+  uint16_t ui16Low(zahl / 128);
+  uint16_t ui16High(zahl - (ui16Low * 128));
+	SlotTabelle[2].ucADR = ui16High;
+	SlotTabelle[2].ucADR2 = ui16Low;
+	SlotTabelle[2].ucSPD = EMERGENCY_STOP;
+}
+
+static void AdresseSet()
+{
+	lcd_clrxy(5, 1, 4);
+	lcd_goto(5, 1);
+	lcd_wordAsDec(zahl);
+	disp_put();
 }
 
 static void readzahl(uint8_t aktwert)
 {
   if (stelle == 0)
   	zahl = aktwert;
-	else if (stelle < 4)
-      	{
-      		zahl = zahl * 10;
-      		zahl = zahl + aktwert;
-      	}
+	else
+    if (stelle < 4)
+      zahl = (zahl * 10) + aktwert;
 	stelle++;
-	lcd_clrxy(5, 1, 4);
-	lcd_goto(5, 1);
-	lcd_wordAsDec(zahl);
-	disp_put();
+  AdresseSet();
 }
 
 uint8_t get_Tastatur()
@@ -260,6 +286,16 @@ uint8_t get_Tastatur()
 	uint8_t ui8_buttons(0);
   // returns non-zero-value in ui8_buttons when key is released after pressing him
   getEditValueFromKeypad(true, 9, &ui16_EditValue, &ui8_buttons);
+
+  if(ui8_buttons)
+  {
+  	lcd_clrxy(0, 2, 21); // is line 6 with iyLineOffset = 4
+    bReadFromQRCode = false;
+    ui8FlagSendingDisptach = 0;
+#if defined OLED
+    lcd_clearLine(6);
+#endif
+  }
 
   if(ui8_buttons & BUTTON_SELECT)  // '#'
 		return SPECIAL_BUTTON::HASH;
@@ -273,16 +309,22 @@ uint8_t get_Tastatur()
   return SPECIAL_BUTTON::NONE;
 }
 
+static void FahrstufenSet()
+{
+  SlotTabelle[2].ucSTAT &= ~DEC_MODE_MASK;
+  SlotTabelle[2].ucSTAT |= statTable[fahrstufen].stat1Val;
+  
+  lcd_goto(12, 1);
+	lcd_write(Stat1ValToString(SlotTabelle[2].ucSTAT));
+}
+
 void fahrstufenCHG()
 {
   fahrstufen++;
   if (fahrstufen == COUNT)
     fahrstufen = 0;
-  SlotTabelle[2].ucSTAT &= ~DEC_MODE_MASK;
-  SlotTabelle[2].ucSTAT |= statTable[fahrstufen].stat1Val;
-  
-  lcd_goto(12, 1);
-	lcd_write(Stat1ToString(SlotTabelle[2].ucSTAT));
+
+  FahrstufenSet();
 }
 
 void returnToDispatchMode()
@@ -294,9 +336,14 @@ void returnToDispatchMode()
   iyLineOffset = 0;
 #endif
   lcd_title();
+  show_new();
+}
+
+void show_new()
+{
   lcd_goto(0, 1);
   lcd_write(F("Neu: "));
-  fahrstufen = 1;
+  fahrstufen = DEC_STEPS;
   fahrstufenCHG();
 }
 
@@ -359,16 +406,16 @@ void setup()
 
   lcd_title();
 
+#if defined QRCODE
+  //---- init serial / QRCode-Reader
+  serial_init();
+#endif
+
 #if defined FREDI_SV
   setupForFrediSV();
   if(!bShowFrediSV)
 #endif
-  {
-    lcd_goto(0, 1);
-    lcd_write(F("Neu: "));
-    fahrstufen = 1;
-    fahrstufenCHG();
-  }
+    show_new();
 }
 
 void loop()
@@ -378,6 +425,9 @@ void loop()
 
   HandleLocoNetMessages();
 	HandleTastatur();
+#if defined QRCODE
+  HandleSerial();
+#endif
 }
 
 // to keep heartbeat alive during delay

@@ -2,8 +2,9 @@
 #include <LocoNet.h>
 
 //=== declaration of var's
-#define DEFAULT_LOCO_ADDRESS 3
- 
+const uint8_t DEFAULT_LOCO_ADDRESS(3);
+const uint8_t SRC_E5(0);
+
 extern const uint8_t SLOTMAX;
 extern SSlotData_t SlotTabelle[SLOTMAX];
 
@@ -23,7 +24,7 @@ static  LnBuf   LnTxBuffer;
 // ED is already used  and defined as OPC_IMM_PACKET
 // EE is already used  and defined as OPC_IMM_PACKET_2
 
-#define   TX_PIN   7
+const uint8_t TX_PIN(7);
 
 //=== keep informations for telegram-sequences ===================
 
@@ -179,6 +180,39 @@ void HandleLocoNetMessages()
         break;
     }
 #endif
+#if defined QRCODE
+    /*
+      FREDI will answer E5-telegram, initiated by QRCode-Reader:
+    */
+    switch (LnPacket->data[0])
+    {
+      case OPC_PEER_XFER:  // 0xE5
+        if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+        {
+          if (LnPacket->data[3] == 0x45)
+          {
+            // REPLY from SV write : compare D1...D4:
+            if((LnPacket->data[8] == 8) && (LnPacket->data[9] == 0))
+            { // answer contains current values SV8, 9, 10, 11
+              const uint8_t ui8_value_D1(((LnPacket->data[10] & 0x01) << 7) + (LnPacket->data[11] & 0x7F));    // D1 = SV8
+              const uint8_t ui8_value_D2(((LnPacket->data[10] & 0x02) << 6) + (LnPacket->data[12] & 0x7F));    // D2 = SV9
+              const uint8_t ui8_value_D3(((LnPacket->data[10] & 0x04) << 5) + (LnPacket->data[13] & 0x7F));    // D3 = SV10
+              const uint8_t ui8_value_D4(((LnPacket->data[10] & 0x08) << 4) + (LnPacket->data[14] & 0x7F));    // D4 = SV11
+              if(   (ui8_value_D1 != SlotTabelle[2].ucADR)
+                  || (ui8_value_D2 != SlotTabelle[2].ucADR2)
+                  || (ui8_value_D3 != statTable[fahrstufen].stat1Val)
+                  || (ui8_value_D4 != SKIP_SELF_TEST) )
+                ui8FlagSendingDisptach = 0x80; // error!
+              else
+                ui8FlagSendingDisptach = 0x03; // success
+            } // if((LnPacket->data[8] == 8) && (LnPacket->data[9] == 0))
+          } // if (LnPacket->data[3] == 0x45)
+        } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+        break;
+      default:  // ignore packets that we don't want to handle
+        break;
+    }
+#endif
 		uint8_t slot(LnPacket->data[1]);
 		if (slot < SLOTMAX)
 		{
@@ -216,6 +250,19 @@ void HandleLocoNetMessages()
 						SlotTabelle[slot].ucSTAT |= (1 << 5);   // set busy
 					}					
 					break;
+
+        case OPC_PEER_XFER:  // 0xE5
+          if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+          {
+            if (LnPacket->data[3] == 0x47)
+            {
+              // REPLY from Discover :
+              const uint8_t ui8_value_D3(((LnPacket->data[10] & 0x04) << 5) + (LnPacket->data[13] & 0x7F));    // D3 = ThrotlleId-low
+              const uint8_t ui8_value_D4(((LnPacket->data[10] & 0x08) << 4) + (LnPacket->data[14] & 0x7F));    // D4 = ThrotlleId-high
+              ui16_ThrottleId = (ui8_value_D4 << 8) + ui8_value_D3;
+            } // if (LnPacket->data[3] == 0x47)
+          } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+          break;
 
 				case OPC_WR_SL_DATA:	// 0xEF = 'Write Slot' vom FRED als Antwort auf 'Slot Read' der Zentrale
 					write_SL_Data(LnPacket->sd);  // speichert die Daten vom FRED und sendet ein LACK (B4 6F 00 5B)
@@ -317,6 +364,14 @@ void write_SL_Data(rwSlotDataMsg SL_Data)
 
 	MasterReplyLack(0x6f, 0x7f);
 	adr_lcd(slot);
+}
+
+void send_request_for_ThrottleId()
+{
+  sendE5Telegram(SRC_E5 /*src*/, 0x07 /*cmd*/, 0x00 /*svx1*/,
+                  0, 0,
+                  0 /*ui8_sv_adrl*/, 0 /*ui8_sv_adrh*/,
+                  0 /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
 }
 
 #if defined DEBUG || defined TELEGRAM_FROM_SERIAL

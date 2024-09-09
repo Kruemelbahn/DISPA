@@ -4,7 +4,8 @@
 #include <LocoNet.h>  // used to include ln_opc.h
 #include <OLEDPanel.h>
 
-uint8_t FrediSvToRead[] = { 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 43, 44, 255 };  // last one is 255, which indicates the end of this list
+uint8_t FrediSvToRead[] = { 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 
+                           18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 43, 44, 255 };  // last one is 255, which indicates the end of this list
 
 extern lnMsg *LnPacket;
 
@@ -83,7 +84,7 @@ void setupForFrediSV()
   lcd_write(F("Release *-Button"));
   while(isButtonStarOrHashPressed() == SPECIAL_BUTTON::STAR);
   lcd_goto(0, 0);
-  lcd_write(F("Connect&Dispatch"));
+  lcd_write(F("Connect FREDI   "));
 
   bShowFrediSV = true;
   SetCVsToDefault(); 
@@ -97,6 +98,9 @@ void setupForFrediSV()
     // light the Heartbeat LED
     oHeartbeat.beat();
 
+    send_request_for_ThrottleId();
+    delay(1000);
+
     HandleLocoNetMessages();  // try to read current throttle-id (which is necessary for reading SVs)
     if(CheckForCommunicationError(15))
     {
@@ -104,8 +108,8 @@ void setupForFrediSV()
       returnToDispatchMode();
       return;
     }
-  }
-#if defined DEBUG
+  } // while(!ui16_ThrottleId)
+#if defined DEBUG 
   Serial.print(F("Throttle-ID: 0x"));
   Serial.println(ui16_ThrottleId, HEX);
 #endif
@@ -116,16 +120,16 @@ void setupForFrediSV()
   // answer:
   // E5 10 01 42 02 10 <id_l> <id_h> <sv_l> <sv_h> 10 <sv_val> 00 00 00 01
   
-  for(uint8_t ui8_CurrentIndexToFrediSvToRead = 0; ui8_CurrentIndexToFrediSvToRead < GetCVCount(); ui8_CurrentIndexToFrediSvToRead++)
+  for(uint8_t ui8_CurrentIndexToFrediSvToRead = 0; ui8_CurrentIndexToFrediSvToRead < MAX_FREDISV; ui8_CurrentIndexToFrediSvToRead++)
   {
     // light the Heartbeat LED
     oHeartbeat.beat();
 
     uint8_t ui8_SvNoToRead(FrediSvToRead[ui8_CurrentIndexToFrediSvToRead]);
-    if(ui8_SvNoToRead >= GetCVCount())
+    if(ui8_SvNoToRead >= MAX_FREDISV)
       break;  // end of list reached
 
-    sendE5Telegram(0x01 /*src*/, 0x02 /*cmd*/, 0x00 /*svx1*/,
+    sendE5Telegram(SRC_E5 /*src*/, 0x02 /*cmd*/, 0x00 /*svx1*/,
                     (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
                     (uint8_t)(ui8_SvNoToRead & 0xFF), (uint8_t)(ui8_SvNoToRead >> 8),
                     0 /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
@@ -163,7 +167,7 @@ void setupForFrediSV()
         return;
       }
     } // while(true)
-  } // for(uint8_t CurrentIndexToFrediSvToRead = 0; CurrentIndexToFrediSvToRead < GetCVCount(); CurrentIndexToFrediSvToRead++)
+  } // for(uint8_t CurrentIndexToFrediSvToRead = 0; CurrentIndexToFrediSvToRead < MAX_FREDISV; CurrentIndexToFrediSvToRead++)
 
   // and finally display them (initialy):
   lcd_SV_Part1();

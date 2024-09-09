@@ -75,6 +75,19 @@ void lcd_title()
   lcd_clear();
 }
 
+void lcd_owner_name(const char *sOwner, const char *sName)
+{
+  lcd_clrxy(0, 0, 16);
+  if(sOwner && (strlen(sOwner) > 0))
+    lcd_write(sOwner);
+  if(sName && (strlen(sName) > 0))
+  {
+    if(sOwner && (strlen(sOwner) > 0))
+      lcd_write("=");
+    lcd_write(sName);
+  }
+}
+
 #if defined FREDI_SV
 
 void lcd_HexAsDec(uint8_t ui8_Out)
@@ -145,6 +158,8 @@ void lcd_Handle_Static_SVPages(uint8_t taste)
     lcd_SV_Part7();
   else if(taste == 8)
     lcd_SV_Part8();
+  else if(taste == 9)
+    lcd_SV_Part9();
   else if (taste == SPECIAL_BUTTON::HASH)  // '#'
   {
     const uint16_t ui16LocoAddress((GetSV(8) << 7) + GetSV(9));
@@ -200,7 +215,7 @@ void lcd_SV_Part3()
   switch(GetSV(10) & 0x07)
   {
     case  0: lcd.print(F("28 FS")); break;
-    case  1: lcd.print(F("M28 FS")); break;
+    case  1: lcd.print(F("28M FS")); break;
     case  2: lcd.print(F("14 FS")); break;
     case  3: lcd.print(F("128 FS")); break;
     case  4: lcd.print(F("28A FS")); break;
@@ -216,7 +231,7 @@ void lcd_SV_Part4()
   lcd_clear();
   lcd_goto(0, 0);
   lcd.print(F("SV11:")); // operating mode
-  if(GetSV(11) == 0x55)
+  if(GetSV(11) == SKIP_SELF_TEST)
     lcd.print(F("operating"));
   else if(GetSV(11) == 0xFF)
     lcd.print(F("selftest"));
@@ -329,6 +344,19 @@ void lcd_SV_Part8()
     lcd.print(F("BRAKE: F"));
     lcd.print(GetSV(44), DEC);
   }      
+}
+
+void lcd_SV_Part9()
+{
+  lcd_clear();
+  lcd_goto(0, 0);
+  lcd.print(F("SV18...34"));
+
+  lcd_goto(15, 0);
+  lcd.print(!GetSV(18) ? '0' : '1');
+  lcd_goto(0, 1);
+  for(uint8_t iSvNo = 19; iSvNo < 35; iSvNo++)
+    lcd.print(!GetSV(iSvNo) ? '0' : '1');
 }
 
 void lcd_FREDI_InitTest()
