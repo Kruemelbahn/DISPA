@@ -198,8 +198,8 @@ void HandleLocoNetMessages()
               const uint8_t ui8_value_D2(((LnPacket->data[10] & 0x02) << 6) + (LnPacket->data[12] & 0x7F));    // D2 = SV9
               const uint8_t ui8_value_D3(((LnPacket->data[10] & 0x04) << 5) + (LnPacket->data[13] & 0x7F));    // D3 = SV10
               const uint8_t ui8_value_D4(((LnPacket->data[10] & 0x08) << 4) + (LnPacket->data[14] & 0x7F));    // D4 = SV11
-              if(   (ui8_value_D1 != SlotTabelle[2].ucADR)
-                  || (ui8_value_D2 != SlotTabelle[2].ucADR2)
+              if(    (ui8_value_D1 != SlotTabelle[2].ucADR)   // adrLow
+                  || (ui8_value_D2 != SlotTabelle[2].ucADR2)  // adrHigh
                   || (ui8_value_D3 != statTable[fahrstufen].stat1Val)
                   || (ui8_value_D4 != SKIP_SELF_TEST) )
                 ui8FlagSendingDisptach = 0x80; // error!

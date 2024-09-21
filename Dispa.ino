@@ -104,7 +104,7 @@ discrete In/Outs used for functionalities:
 HeartBeat oHeartbeat;
 
 //========================================================
-#define SW_VERSION F("2.4")
+#define SW_VERSION F("2.5")
 #define SW_YEAR    F("2024")
 
 #include <LocoNet.h>  // used to include ln_opc.h
@@ -254,10 +254,10 @@ static void SlotManager(uint8_t adr, uint8_t adr2)
 
 static void disp_put()
 {
-  uint16_t ui16Low(zahl / 128);
-  uint16_t ui16High(zahl - (ui16Low * 128));
-	SlotTabelle[2].ucADR = ui16High;
-	SlotTabelle[2].ucADR2 = ui16Low;
+  uint16_t ui16High(zahl / 128);
+  uint16_t ui16Low(zahl - (ui16High * 128));
+	SlotTabelle[2].ucADR = ui16Low;
+	SlotTabelle[2].ucADR2 = ui16High;
 	SlotTabelle[2].ucSPD = EMERGENCY_STOP;
 }
 
