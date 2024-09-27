@@ -104,7 +104,7 @@ discrete In/Outs used for functionalities:
 HeartBeat oHeartbeat;
 
 //========================================================
-#define SW_VERSION F("2.5")
+#define SW_VERSION F("2.6")
 #define SW_YEAR    F("2024")
 
 #include <LocoNet.h>  // used to include ln_opc.h

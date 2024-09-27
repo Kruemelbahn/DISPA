@@ -129,14 +129,14 @@ void HandleSerial()
   {
 #if defined SEND_QRCODE_DATA
     ui8FlagSendingDisptach = 0x02;
-    if(SlotTabelle[2].ucADR /*adrLow*/ && SlotTabelle[2].ucADR2 /*adrHigh*/)
+    if(SlotTabelle[2].ucADR /*adrLow*/ || SlotTabelle[2].ucADR2 /*adrHigh*/)
     {
       // cmd == 0x05 => write four Bytes: SV8, 9, 10, 11 (where SV11 = mode, assumed it is SKIP_SELF_TEST which is send again to keep this state)
       sendE5Telegram(SRC_E5 /*src*/, 0x05 /*cmd*/, 0x00 /*svx1*/,
         (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
         8, 0,
         SlotTabelle[2].ucADR2 /*D1*/, SlotTabelle[2].ucADR/*D2*/, statTable[fahrstufen].stat1Val/*D3*/, SKIP_SELF_TEST/*D4*/);
-    } // if(SlotTabelle[2].ucADR /*adrLow*/ && SlotTabelle[2].ucADR2 /*adrHigh*/)
+    } // if(SlotTabelle[2].ucADR /*adrLow*/ || SlotTabelle[2].ucADR2 /*adrHigh*/)
     else
     {
       // cmd == 0x01 => write one Byte: SV10 (DecoderSteps)
