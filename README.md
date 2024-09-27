@@ -18,6 +18,8 @@ Version 2.4 supports the reading of Parameter SV18...34 from FREDI using the LNS
 Version 2.5 Bugfix for vehicleaddress reading from QR-Code.<br>
             New: Transfer Decodersteps to FREDI without valid vehicleaddress.<br>
 
+Version 2.6 Bugfix for short vehicleaddress reading from QR-Code and transfer to FREDI.<br>
+
 In Dispa.ino you can select whether the software should be compiled for usage with LCD or OLED.<br>
 
 DispaSetup is a small utility for testing OLED and keyboard.<br>
