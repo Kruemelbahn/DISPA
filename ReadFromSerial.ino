@@ -125,9 +125,9 @@ void HandleSerial()
   #endif
     } // if (ui16_ThrottleId)
   } // if (ui8FlagSendingDisptach == 0x01)
+#if defined SEND_QRCODE_DATA
   if (ui16_ThrottleId && (ui8FlagSendingDisptach == 0x01))
   {
-#if defined SEND_QRCODE_DATA
     ui8FlagSendingDisptach = 0x02;
     if(SlotTabelle[2].ucADR /*adrLow*/ || SlotTabelle[2].ucADR2 /*adrHigh*/)
     {
@@ -153,19 +153,17 @@ void HandleSerial()
       if(!ui8FctArray[iFctNo])
         continue;
         
-#if defined SEND_QRCODE_DATA
       // cmd == 0x01 => write one Byte
       sendE5Telegram(SRC_E5 /*src*/, 0x01 /*cmd*/, 0x00 /*svx1*/,
         (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
         iFctNo + 18, 0,
         ui8FctArray[iFctNo] == 1 ? 0x00 : 0xFF /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
         delay(250); // give throttle a change for reply...which is ignored
-#endif
     } // for(uint8_t iFctNo = 0; iFctNo < SV_FCT_NR_MAX; iFctNo++)
-#endif
   } // if (ui16_ThrottleId && (ui8FlagSendingDisptach == 0x01))
+#endif // #if defined SEND_QRCODE_DATA
 
-  // check the answer, if values are set correct:
+  // check the answer, whether values are set correct:
   if(ui8FlagSendingDisptach > 0x03)
   { 
     // handle error on writing SV8, 9, 10, 11
