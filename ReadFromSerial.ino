@@ -22,10 +22,10 @@ uint8_t ui8DecStepsPos(0);    // optional, default taken from manual input
 char recv_buf[RECV_BUF_COUNT];
 
 const uint8_t SV_FCT_NR_MAX(17); // 0...16
-// 0 = change nothing
-// 1 = set to 0x00
-// 2 = set to 0xFF
-uint8_t ui8FctArray[SV_FCT_NR_MAX] { 0 };
+enum KINDOF_FUNCTION_TYPE { NO_CHANGE = 0,  // change nothing
+                            PRESSED = 1,    // set to 0x00  => on while pressed
+                            TOGGLE = 2 };   // set to 0xFF  => toggle (default)
+uint8_t ui8FctArray[SV_FCT_NR_MAX] { KINDOF_FUNCTION_TYPE::NO_CHANGE };
 
 SoftwareSerial dispaSerial(DISPA_RXD, DISPA_TXD); // RX, TX
 
@@ -94,7 +94,7 @@ void HandleSerial()
   if(bShowFrediSV)
     return;
 
-  if (ui8FlagSendingDisptach == 0x01)
+  if (ui8FlagSendingDispatch == SENDING_DISPATCH_MODE::E5_CAN_BE_SEND)
   {
 #if defined SEND_QRCODE_DATA
     ul_WaitTelegram = millis(); // start controltime
@@ -109,7 +109,7 @@ void HandleSerial()
       HandleLocoNetMessages();  // try to read current throttle-id
       if((millis() - ul_WaitTelegram) > 15000)
       {
-        ui8FlagSendingDisptach = 0x80;
+        ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_ANSWER_ERROR;
     #if defined DEBUG
         Serial.println(F("Communication error"));
     #endif
@@ -124,23 +124,23 @@ void HandleSerial()
       Serial.println(ui16_ThrottleId, HEX);
   #endif
     } // if (ui16_ThrottleId)
-  } // if (ui8FlagSendingDisptach == 0x01)
+  } // if (ui8FlagSendingDispatch == SENDING_DISPATCH_MODE::E5_CAN_BE_SEND)
 #if defined SEND_QRCODE_DATA
-  if (ui16_ThrottleId && (ui8FlagSendingDisptach == 0x01))
+  if (ui16_ThrottleId && (ui8FlagSendingDispatch == SENDING_DISPATCH_MODE::E5_CAN_BE_SEND))
   {
-    ui8FlagSendingDisptach = 0x02;
+    ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_SENDED_WAIT_FOR_ANSWER;
     if(SlotTabelle[2].ucADR /*adrLow*/ || SlotTabelle[2].ucADR2 /*adrHigh*/)
     {
-      // cmd == 0x05 => write four Bytes: SV8, 9, 10, 11 (where SV11 = mode, assumed it is SKIP_SELF_TEST which is send again to keep this state)
-      sendE5Telegram(SRC_E5 /*src*/, 0x05 /*cmd*/, 0x00 /*svx1*/,
+      // cmd == SV_CMD::SV_WRITE_QUAD(0x05) => write four Bytes: SV8, 9, 10, 11 (where SV11 = mode, assumed it is SKIP_SELF_TEST which is send again to keep this state)
+      sendE5Telegram(SRC_E5 /*src*/, SV_CMD::SV_WRITE_QUAD /*cmd*/, 0x00 /*svx1*/,
         (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
         8, 0,
         SlotTabelle[2].ucADR2 /*D1*/, SlotTabelle[2].ucADR/*D2*/, statTable[fahrstufen].stat1Val/*D3*/, SKIP_SELF_TEST/*D4*/);
     } // if(SlotTabelle[2].ucADR /*adrLow*/ || SlotTabelle[2].ucADR2 /*adrHigh*/)
     else
     {
-      // cmd == 0x01 => write one Byte: SV10 (DecoderSteps)
-      sendE5Telegram(SRC_E5 /*src*/, 0x01 /*cmd*/, 0x00 /*svx1*/,
+      // cmd == SV_CMD::SV_WRITE_SINGLE(0x01) => write one Byte: SV10 (DecoderSteps)
+      sendE5Telegram(SRC_E5 /*src*/, SV_CMD::SV_WRITE_SINGLE /*cmd*/, 0x00 /*svx1*/,
         (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
         10, 0,
         statTable[fahrstufen].stat1Val /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
@@ -153,21 +153,21 @@ void HandleSerial()
       if(!ui8FctArray[iFctNo])
         continue;
         
-      // cmd == 0x01 => write one Byte
-      sendE5Telegram(SRC_E5 /*src*/, 0x01 /*cmd*/, 0x00 /*svx1*/,
+      // cmd == SV_CMD::SV_WRITE_SINGLE(0x01) => write one Byte
+      sendE5Telegram(SRC_E5 /*src*/, SV_CMD::SV_WRITE_SINGLE /*cmd*/, 0x00 /*svx1*/,
         (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
         iFctNo + 18, 0,
-        ui8FctArray[iFctNo] == 1 ? 0x00 : 0xFF /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
+        ui8FctArray[iFctNo] == KINDOF_FUNCTION_TYPE::PRESSED ? 0x00 : 0xFF /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
         delay(250); // give throttle a change for reply...which is ignored
     } // for(uint8_t iFctNo = 0; iFctNo < SV_FCT_NR_MAX; iFctNo++)
-  } // if (ui16_ThrottleId && (ui8FlagSendingDisptach == 0x01))
+  } // if (ui16_ThrottleId && (ui8FlagSendingDispatch == SENDING_DISPATCH_MODE::E5_CAN_BE_SEND))
 #endif // #if defined SEND_QRCODE_DATA
 
   // check the answer, whether values are set correct:
-  if(ui8FlagSendingDisptach > 0x03)
+  if(ui8FlagSendingDispatch > SENDING_DISPATCH_MODE::E5_ANSWER_OK)
   { 
     // handle error on writing SV8, 9, 10, 11
-    ui8FlagSendingDisptach = 0;
+    ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_NONE;
   }
 
   if (!dispaSerial.available())
@@ -202,7 +202,7 @@ void HandleSerial()
 #endif
 
   // Empfangspuffer analysieren:
-  //    loco.owner=MZ&loco.name=ETA 180 015 a+b, ETA 180 016 a+b&loco.address=680&loco.steps=128
+  //    loco.owner=MZ&loco.name=ETA 180 015 a+b, ETA 180 016 a+b&loco.address=680&loco.steps=128&loco.f2=1
   //    http://192.168.4.1/index.html?loco.address=680&loco.direction=2&loco.longAddress=on&loco=1
   char *p(strstr(recv_buf, "o.s")); // part of 'loco.steps='
   if(p)
@@ -227,13 +227,27 @@ void HandleSerial()
       chRead = recv_buf[ui8pos++];
       if(chRead == '=')
       {
+        if(ui8fNr == 255) // F0...F68 currently described in https://www.nmra.org/sites/default/files/standards/sandrp/DCC/S/s-9.2.1_dcc_extended_packet_formats.pdf
+        {
+          // special meaning for F255: set all to same value:
+          chRead = recv_buf[ui8pos];
+          for (uint8_t i = 0; i < SV_FCT_NR_MAX; i++)
+            ui8FctArray[i] = (chRead == '0' ? KINDOF_FUNCTION_TYPE::PRESSED: KINDOF_FUNCTION_TYPE::TOGGLE);
+#if defined DEBUG
+          Serial.print('F');
+          Serial.print(ui8fNr);
+          Serial.print('=');
+          Serial.println((chRead == '0' ? "0" : "FF");
+#endif        
+          break;
+        } // if(ui8fNr == 255)
         if(ui8fNr < SV_FCT_NR_MAX)
         {
           chRead = recv_buf[ui8pos];
           if(chRead == '0')
-            ui8FctArray[ui8fNr] = 1;  // set SV to 0x00
+            ui8FctArray[ui8fNr] = KINDOF_FUNCTION_TYPE::PRESSED; // set SV to 0x00
           if(chRead == '1')
-            ui8FctArray[ui8fNr] = 2;  // set SV to 0xFF
+            ui8FctArray[ui8fNr] = KINDOF_FUNCTION_TYPE::TOGGLE;  // set SV to 0xFF (default)
 #if defined DEBUG
           Serial.print('F');
           Serial.print(ui8fNr);
@@ -309,7 +323,7 @@ void HandleSerial()
     FahrstufenSet();
   } // if(ui8DecStepsPos)
 
-  ui8FlagSendingDisptach = 0x01;
+  ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_CAN_BE_SEND;
   bReadFromQRCode = true;
 } // void HandleSerial()
 

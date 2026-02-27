@@ -44,8 +44,8 @@ const uint8_t TX_PIN(7);
 // Leerzeichen zwischen zwei Bytes erforderlich
 // Prüfsumme wird am Ende automatisch ermittelt und hinzugefügt
 #if defined TELEGRAM_FROM_SERIAL
-static const uint8_t MAX_LEN_LNBUF = 64;
-uint8_t ui8_PointToBuffer = 0;
+static const uint8_t MAX_LEN_LNBUF(64);
+uint8_t ui8_PointToBuffer(0);
 
 uint8_t ui8a_receiveBuffer[MAX_LEN_LNBUF];
 uint8_t ui8a_resultBuffer[MAX_LEN_LNBUF];
@@ -187,9 +187,9 @@ void HandleLocoNetMessages()
     switch (LnPacket->data[0])
     {
       case OPC_PEER_XFER:  // 0xE5
-        if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+        if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
         {
-          if (LnPacket->data[3] == 0x45)
+          if (LnPacket->data[3] == SV_WRITE_QUAD_ANSWER)
           {
             // REPLY from SV write : compare D1...D4:
             if((LnPacket->data[8] == 8) && (LnPacket->data[9] == 0))
@@ -202,12 +202,12 @@ void HandleLocoNetMessages()
                   || (ui8_value_D2 != SlotTabelle[2].ucADR2)  // adrHigh
                   || (ui8_value_D3 != statTable[fahrstufen].stat1Val)
                   || (ui8_value_D4 != SKIP_SELF_TEST) )
-                ui8FlagSendingDisptach = 0x80; // error!
+                ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_ANSWER_ERROR; // error!
               else
-                ui8FlagSendingDisptach = 0x03; // success
+                ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_ANSWER_OK; // success
             } // if((LnPacket->data[8] == 8) && (LnPacket->data[9] == 0))
-          } // if (LnPacket->data[3] == 0x45)
-        } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+          } // if (LnPacket->data[3] == SV_WRITE_QUAD_ANSWER)
+        } // if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
         break;
       default:  // ignore packets that we don't want to handle
         break;
@@ -239,7 +239,7 @@ void HandleLocoNetMessages()
 						{
 							SlotTabelle[slot].ucSTAT |= (1 << 5) | (1 << 4); // set busy and active
 							Slot_SL_RD(slot);
-						}
+						} // if (slot != 0x00)
 						else
 							Slot_SL_RD(2);  // 'BA 00 00 45' received -> dispatch = sendet 'Slot Read' als Antwort der Zentrale
 					}
@@ -252,16 +252,16 @@ void HandleLocoNetMessages()
 					break;
 
         case OPC_PEER_XFER:  // 0xE5
-          if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+          if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
           {
-            if (LnPacket->data[3] == 0x47)
+            if (LnPacket->data[3] == SV_DISCOVER_ANSWER)
             {
               // REPLY from Discover :
               const uint8_t ui8_value_D3(((LnPacket->data[10] & 0x04) << 5) + (LnPacket->data[13] & 0x7F));    // D3 = ThrotlleId-low
               const uint8_t ui8_value_D4(((LnPacket->data[10] & 0x08) << 4) + (LnPacket->data[14] & 0x7F));    // D4 = ThrotlleId-high
               ui16_ThrottleId = (ui8_value_D4 << 8) + ui8_value_D3;
-            } // if (LnPacket->data[3] == 0x47)
-          } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+            } // if (LnPacket->data[3] == SV_DISCOVER_ANSWER)
+          } // if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
           break;
 
 				case OPC_WR_SL_DATA:	// 0xEF = 'Write Slot' vom FRED als Antwort auf 'Slot Read' der Zentrale
@@ -326,7 +326,7 @@ void Slot_SL_RD(uint8_t slot)
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucADR);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSPD);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucDIRF);
-	addByteLnBuf( &LnTxBuffer, 0x05); //trk
+	addByteLnBuf( &LnTxBuffer, GTRK_MLOK1 + GTRK_POWER); // trk
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSS2);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucADR2);
 	addByteLnBuf( &LnTxBuffer, SlotTabelle[slot].ucSND);
@@ -368,7 +368,7 @@ void write_SL_Data(rwSlotDataMsg SL_Data)
 
 void send_request_for_ThrottleId()
 {
-  sendE5Telegram(SRC_E5 /*src*/, 0x07 /*cmd*/, 0x00 /*svx1*/,
+  sendE5Telegram(SRC_E5 /*src*/, SV_CMD::SV_DISCOVER /*cmd*/, 0x00 /*svx1*/,
                   0, 0,
                   0 /*ui8_sv_adrl*/, 0 /*ui8_sv_adrh*/,
                   0 /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);

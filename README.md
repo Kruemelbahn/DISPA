@@ -30,6 +30,9 @@ DispaSetup is a small utility for testing OLED and keyboard.
 ## new in Version 2.6
 - Bugfix for short vehicleaddress reading from QR-Code and transfer to FREDI.
 
+## new in Version 2.7
+- new QR-Code 'loco.f255=x', new function "notifyThrottleId" (see [Documentation](Documentation/Dispa.pdf)), Codecleaning
+
 ### Requested libraries
 DISPA requires my libraries listed below in addition to various Arduino standard libraries:<br> 
 - [HeartBeat](https://www.github.com/Kruemelbahn/HeartBeat)<br>
@@ -37,7 +40,7 @@ DISPA requires my libraries listed below in addition to various Arduino standard
 - [OLEDPanel](https://www.github.com/Kruemelbahn/OLEDPanel)<br>
 
 ### original files and schematic
-The original files developed by FREMO for DISPA can be found here:<br>
+The original files for DISPA developed by FREMO can be found here:<br>
 https://sourceforge.net/p/embeddedloconet/svn/HEAD/tree/old-cvs/trunk/apps/Dispa/<br>
 the original schematic developed by FREMO for DISPA can be found here:<br>
 https://sourceforge.net/p/fremodcc/svn/HEAD/tree/Dispa/trunk/<br>

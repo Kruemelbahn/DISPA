@@ -52,6 +52,9 @@
             - added functionality for read and show of SV8...10, FREDI-Test added
             2024-08-29 V2.4 by Michael Zimmermann
             - added functionality for QRCode-Reader
+            2026-01-05 V2.7 by Michael Zimmermann
+            - added functionality 'f255' for QRCode-Reader, CodeCleaning
+            - added functionality 'notifyThrottleId' for showing ThrottleOwner
   
 used I²C-Addresses:
   - 0x78  OLED-Panel ggf. mit
@@ -103,9 +106,9 @@ discrete In/Outs used for functionalities:
 #include <HeartBeat.h>
 HeartBeat oHeartbeat;
 
-//========================================================
-#define SW_VERSION F("2.6")
-#define SW_YEAR    F("2024")
+//==================================================================================================
+#define SW_VERSION F("2.7")
+#define SW_YEAR    F("2026")
 
 #include <LocoNet.h>  // used to include ln_opc.h
 #include "LocoNetFrediSV.h"
@@ -133,10 +136,8 @@ typedef struct
 
 const uint8_t DEC_STEPS(1);
 const uint8_t SKIP_SELF_TEST(0x55);
-const uint8_t EMERGENCY_STOP(0x01);
 const uint8_t SLOTMAX(28);
 static SSlotData_t SlotTabelle[SLOTMAX];
-static uint8_t trk(0x05);
 uint16_t ui16_ThrottleId(0);
 uint16_t zahl(0);
 uint8_t stelle(0);
@@ -148,9 +149,11 @@ uint8_t iyLineOffset(0);
 // 0x03 = E5 answer is ok
 // 0x04 = E5 sends function states
 // 0x80 = E5 answer is faulty
-uint8_t ui8FlagSendingDisptach(0);
-bool bFREDITestActive(false);
-bool bReadFromQRCode(false);
+enum SENDING_DISPATCH_MODE { E5_NONE = 0x00, E5_CAN_BE_SEND = 0x01, E5_SENDED_WAIT_FOR_ANSWER = 0x02, E5_ANSWER_OK = 0x03, E5_SENDS_FCT_STATE = 0x04, E5_ANSWER_ERROR = 0x80 };
+uint8_t ui8FlagSendingDispatch(SENDING_DISPATCH_MODE::E5_NONE);
+
+boolean bFREDITestActive(false);
+boolean bReadFromQRCode(false);
 boolean bShowFrediSV(false);
 #ifdef FREDI_SV
   const uint8_t FCT_GROUPS(4);
@@ -159,6 +162,15 @@ boolean bShowFrediSV(false);
   uint8_t ui8_mirrorLocoSpeed(0);
   uint8_t ui8_mirrorFunctions[FCT_GROUPS] {0};
 #endif
+
+/*==================================================================================================
+   function can be used for additional handling with ThrottleID, e.g. display ThrottleOwner if known
+   function is actually called inside 'lcd_ThrottleId()', regardless if LCD or OLED is defined
+
+   should return true, if owner could be displayed
+*/
+extern boolean notifyThrottleId(const uint16_t uiThrottleId) __attribute__((weak));
+//==================================================================================================
 
 uint8_t ret_slot(uint8_t adr, uint8_t adr2)
 {
@@ -211,16 +223,23 @@ static const char* Stat1ValToString(unsigned char s)
 
 static void lcd_ThrottleId()
 {
+#if defined OLED
 	lcd_clrxy(0, 3, 21); // is line 7 with iyLineOffset = 4
 	lcd_write(F("ThrottleID: 0x"));
   lcd_wordAsHex(ui16_ThrottleId);
+#endif
+
+  if(notifyThrottleId)
+    if(notifyThrottleId(ui16_ThrottleId))
+      return;
+  lcd_write("   ");
 }
 
 static void adr_lcd(uint8_t slot)
 {
 	if (slot < SLOTMAX)
 		ui16_ThrottleId = (SlotTabelle[slot].ucID2 << 8) + SlotTabelle[slot].ucID1;
-  ui8FlagSendingDisptach = 0;
+  ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_NONE;
   if(bShowFrediSV)
     return;
 
@@ -238,9 +257,7 @@ static void adr_lcd(uint8_t slot)
     lcd_write(Stat1ValToString(SlotTabelle[slot].ucSTAT));
   }
 
-#if defined OLED
   lcd_ThrottleId();
-#endif
 }
 
 static void SlotManager(uint8_t adr, uint8_t adr2)
@@ -258,7 +275,7 @@ static void disp_put()
   uint16_t ui16Low(zahl - (ui16High * 128));
 	SlotTabelle[2].ucADR = ui16Low;
 	SlotTabelle[2].ucADR2 = ui16High;
-	SlotTabelle[2].ucSPD = EMERGENCY_STOP;
+	SlotTabelle[2].ucSPD = OPC_LOCO_SPD_ESTOP;
 }
 
 static void AdresseSet()
@@ -291,7 +308,7 @@ uint8_t get_Tastatur()
   {
   	lcd_clrxy(0, 2, 21); // is line 6 with iyLineOffset = 4
     bReadFromQRCode = false;
-    ui8FlagSendingDisptach = 0;
+    ui8FlagSendingDispatch = SENDING_DISPATCH_MODE::E5_NONE;
 #if defined OLED
     lcd_clearLine(6);
 #endif
@@ -392,7 +409,6 @@ void setup()
   for (uint8_t lauf = 0; lauf < SLOTMAX; lauf++)
     SlotTabelle[lauf].ucSTAT=0x00;
   
-  trk = 0x07;
   SlotTabelle[2].ucSTAT = 0x33;
   
   //---- init LocoNet

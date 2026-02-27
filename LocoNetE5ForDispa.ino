@@ -6,18 +6,18 @@
 //=== functions ==================================================
 boolean HandleE5MessageForFrediSv()
 {
-  if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+  if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
   {
     // SV_ADRL
     uint8_t ui8_LSBAdr(((LnPacket->data[5] & 0x04) << 5) + (LnPacket->data[8] & 0x7F));
-    if (LnPacket->data[3] == 0x42)
+    if (LnPacket->data[3] == SV_READ_SINGLE_ANSWER)
     {
       // REPLY from SV read : store response D1 in SV-Table:
       uint8_t ui8_valueLSB(((LnPacket->data[10] & 0x01) << 7) + (LnPacket->data[11] & 0x7F));    // D1
       WriteCVtoEEPROM(ui8_LSBAdr, ui8_valueLSB);
       return true;
-    } // if (LnPacket->data[3] == 0x42)
-  } // if (LnPacket->data[4] == SV2_Format_2)  // telegram with Message-Format '2'
+    } // if (LnPacket->data[3] == SV_READ_SINGLE_ANSWER)
+  } // if (LnPacket->data[4] == SV2_FORMAT_2)  // telegram with Message-Format '2'
   return false;
 }
 
@@ -47,14 +47,14 @@ boolean sendE5Telegram(uint8_t src, uint8_t cmd, uint8_t svx1, uint8_t dst_l, ui
     SVX2 |= 0b00001000;
 
   // calculate checksum:
-  uint8_t ui8_ChkSum(OPC_PEER_XFER ^ 16 ^ src ^ cmd ^ SV2_Format_2 ^ svx1 ^ dst_l ^ dst_h ^ adrl ^ adrh ^ SVX2 ^ D1 ^ D2 ^ D3 ^ D4 ^ 0xFF);  //XOR
+  uint8_t ui8_ChkSum(OPC_PEER_XFER ^ 16 ^ src ^ cmd ^ SV2_FORMAT_2 ^ svx1 ^ dst_l ^ dst_h ^ adrl ^ adrh ^ SVX2 ^ D1 ^ D2 ^ D3 ^ D4 ^ 0xFF);  //XOR
   bitWrite(ui8_ChkSum, 7, 0);     // set MSB zero
 
   addByteLnBuf(&LnTxBuffer, OPC_PEER_XFER);				// opcode E5
   addByteLnBuf(&LnTxBuffer, 16);									// length
   addByteLnBuf(&LnTxBuffer, src);		              // src
   addByteLnBuf(&LnTxBuffer, cmd);		              // cmd
-  addByteLnBuf(&LnTxBuffer, SV2_Format_2);				// sv-type
+  addByteLnBuf(&LnTxBuffer, SV2_FORMAT_2);				// sv-type
   addByteLnBuf(&LnTxBuffer, svx1);								// svx1
   addByteLnBuf(&LnTxBuffer, dst_l);		            // dst_l    
   addByteLnBuf(&LnTxBuffer, dst_h);		            // dst_h

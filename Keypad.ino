@@ -48,13 +48,11 @@ void CheckAndInitKeypad()
   Wire.beginTransmission(ui8_KPDi2cAddress);
   boolean b_keypadDetected(Wire.endTransmission() == 0);
 
-  bool bAddrT(false);
   if(!b_keypadDetected)
   {
     ui8_KPDi2cAddress = PCF8574T_ADDR_KEY;
     Wire.beginTransmission(ui8_KPDi2cAddress);
     b_keypadDetected = (Wire.endTransmission() == 0);
-    bAddrT = true;
   }
   
   if(b_keypadDetected && !ui8_KPDPresent)

@@ -129,7 +129,7 @@ void setupForFrediSV()
     if(ui8_SvNoToRead >= MAX_FREDISV)
       break;  // end of list reached
 
-    sendE5Telegram(SRC_E5 /*src*/, 0x02 /*cmd*/, 0x00 /*svx1*/,
+    sendE5Telegram(SRC_E5 /*src*/, SV_CMD::SV_READ_SINGLE /*cmd*/, 0x00 /*svx1*/,
                     (uint8_t)(ui16_ThrottleId & 0xFF), (uint8_t)(ui16_ThrottleId >> 8),
                     (uint8_t)(ui8_SvNoToRead & 0xFF), (uint8_t)(ui8_SvNoToRead >> 8),
                     0 /*D1*/, 0/*D2*/, 0/*D3*/, 0/*D4*/);
